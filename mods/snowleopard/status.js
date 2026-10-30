@@ -6,7 +6,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, agents, run } from "herdr";
-import { C, FONT, GLYPH, key, paint, rrect, vgrad, embossed, plural } from "./kit.js";
+import { C, FONT, GLYPH, key, paint, rrect, vgrad, embossed, plural, startDrag } from "./kit.js";
 
 export default class StatusBar {
   init() {
@@ -34,6 +34,11 @@ export default class StatusBar {
         this.size = size;
         cx.notify();
       })
+      // The bottom bar moves the window too; its grip resizes it.
+      .on_mouse_down("left", (e, cx) => {
+        if (e.click_count < 2) startDrag("move", e, w);
+        cx.stop_propagation();
+      })
       .relative()
       .size_full()
       .font_family(FONT)
@@ -57,8 +62,32 @@ export default class StatusBar {
           .when(blocked.length > 0, (el) =>
             el.child(embossed(`${blocked.length} ${blocked.length === 1 ? "needs" : "need"} you`, { size: 11, bold: true, color: live ? "#9c1b10" : "#7a7a7a" })),
           )
-          .when(Boolean(urgent), (el) => el.tooltip("Go to the agent that needs you").on_click(() => run("agent.focus", { terminal: urgent.address }))),
+          .when(Boolean(urgent), (el) =>
+            el
+              .tooltip("Go to the agent that needs you")
+              .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+              .on_click(() => run("agent.focus", { terminal: urgent.address })),
+          ),
       )
-      .child(div().absolute().bottom(2).right(2).child(svg(GLYPH.grip).w(11).h(11).text_color("#000000")));
+      .child(
+        div()
+          .id("grip")
+          .absolute()
+          .bottom(0)
+          .right(0)
+          .w(18)
+          .h(h)
+          .flex()
+          .items_end()
+          .justify_end()
+          .p(2)
+          .cursor_nwse_resize()
+          .child(svg(GLYPH.grip).w(11).h(11).text_color("#000000"))
+          .tooltip("Drag to resize the window")
+          .on_mouse_down("left", (e, cx) => {
+            cx.stop_propagation();
+            startDrag("resize", e, w);
+          }),
+      );
   }
 }

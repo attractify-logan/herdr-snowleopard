@@ -516,7 +516,7 @@ export function openSheet(kind, p = {}) {
   });
 }
 
-/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen }. */
+/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen, zoomWindow }. */
 export function perform(act) {
   if (!act) return;
   if (act.run) run(act.run[0], act.run[1] ?? {});
@@ -525,6 +525,7 @@ export function perform(act) {
   if (act.toggle) run("layout.toggle", { id: act.toggle });
   if (act.look) setLook(act.look);
   if (act.fullscreen) window.toggle_fullscreen();
+  if (act.zoomWindow) toggleZoom();
   if (act.newSpaceIn)
     pickFolder({ prompt: "New Space" })
       .then((folder) => folder && run("space.new", { folder }))
@@ -557,6 +558,112 @@ export function spaceItems(s) {
     { sep: true },
     { label: "Close Space…", act: { sheet: ["closespace", { space: s.id }] } },
   ];
+}
+
+// ---- the window on the desktop
+//
+// The desktop column holds spacers around the window: desk-top over desk-row,
+// whose desk-left sits beside the window. Zoomed, the window and desk-row take
+// the leftover space (weight) inside the margins below; placed, they have a
+// size in px and desk-right / desk-bottom take what's left.
+
+export const MIN_W = 520;
+export const MIN_H = 300;
+const MARGIN = { x: 20, y: 12 };
+const MENUBAR = 22;
+
+function node(id, n = layout()) {
+  if (!n || typeof n !== "object") return null;
+  if (n.id === id) return n;
+  for (const c of n.children ?? []) {
+    const hit = node(id, c);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** Is the window zoomed to fill the desktop? (Placed windows keep their frame in shared "sl.placed".) */
+export function zoomed() {
+  return !shared("sl.placed");
+}
+
+/** The desktop's size (what the window may cover) for an app window of this size. */
+export function desktopLimits(app) {
+  const dock = node("dock");
+  const dockH = dock && !dock.hidden ? dock.size?.px ?? 0 : 0;
+  return { w: app.width, h: app.height - MENUBAR - dockH };
+}
+
+/** Where the window is now, in desktop px; h is null while zoomed (the drag works it out). */
+export function currentFrame(width) {
+  const placed = shared("sl.placed");
+  if (placed?.w) return { ...placed, bottom: 0 };
+  return { x: MARGIN.x, y: MARGIN.y, w: width, h: null, bottom: MARGIN.y };
+}
+
+/** Places the window: spacers and its own size in px, the far spacers take the rest. */
+export function applyFrame(f) {
+  setShared("sl.placed", f);
+  run("layout.resize", { id: "desk-left", px: f.x });
+  run("layout.resize", { id: "desk-top", px: f.y });
+  run("layout.resize", { id: "window", px: f.w });
+  run("layout.resize", { id: "desk-row", px: f.h });
+  run("layout.resize", { id: "desk-right", weight: 1 });
+  run("layout.resize", { id: "desk-bottom", weight: 1 });
+}
+
+/** Zooms the window to fill the desktop (inside a margin), following the app window's size. */
+export function fillDesktop() {
+  setShared("sl.placed", null);
+  run("layout.resize", { id: "desk-left", px: MARGIN.x });
+  run("layout.resize", { id: "desk-right", px: MARGIN.x });
+  run("layout.resize", { id: "desk-top", px: MARGIN.y });
+  run("layout.resize", { id: "desk-bottom", px: MARGIN.y });
+  run("layout.resize", { id: "window", weight: 1 });
+  run("layout.resize", { id: "desk-row", weight: 1 });
+}
+
+/** Records a part's size in shared "sl.desk" (the desk spacers, the window's width), when it changes. */
+export function reportSize(slot, size) {
+  const all = shared("sl.desk") ?? {};
+  const w = Math.round(size.width);
+  const h = Math.round(size.height);
+  if (all[slot]?.w === w && all[slot]?.h === h) return;
+  setShared("sl.desk", { ...all, [slot]: { w, h } });
+}
+
+export function setSavedFrame(f) {
+  setShared("sl.frame", f);
+}
+
+/**
+ * The green button: zoomed ⇄ the size and place it had, or a centered window.
+ * width: the window's width now (the title bar's).
+ */
+export function toggleZoom(width = shared("sl.desk")?.window?.w) {
+  if (!zoomed()) return fillDesktop();
+  const saved = shared("sl.frame");
+  if (saved?.w) return applyFrame(saved);
+  // Zoomed, the window is the desktop less its margins; desk-left is as tall as it.
+  const rowH = shared("sl.desk")?.["desk-left"]?.h;
+  if (!width || !rowH) return;
+  const lim = { w: width + MARGIN.x * 2, h: rowH + MARGIN.y * 2 };
+  const w = Math.max(MIN_W, Math.round(lim.w * 0.72));
+  const h = Math.max(MIN_H, Math.round(lim.h * 0.78));
+  applyFrame({ x: Math.round((lim.w - w) / 2), y: Math.round((lim.h - h) / 3), w, h });
+}
+
+/** Starts moving ("move") or resizing ("resize") the window from a press. */
+export function startDrag(mode, e, width) {
+  openOverlay({
+    mod: "snowleopard",
+    kind: "window",
+    frame: "none",
+    width: 1,
+    height: 1,
+    at: { x: 0, y: 0 },
+    props: { role: "drag", mode, start: { x: e.position.x, y: e.position.y }, frame: currentFrame(width) },
+  });
 }
 
 // ---- words

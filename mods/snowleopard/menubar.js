@@ -179,7 +179,7 @@ export default class MenuBar {
         const tabs = (s?.tabs ?? []).filter((t) => !t.settled || t.active);
         return [
           { label: "Minimize", shortcut: sc("window.minimize"), act: { run: ["window.minimize"] } },
-          { label: "Zoom", act: { run: ["window.maximize"] } },
+          { label: "Zoom", act: { zoomWindow: true } },
           { sep: true },
           { label: "Select Next Tab", shortcut: sc("tab.next"), act: { run: ["tab.next"] } },
           { label: "Select Previous Tab", shortcut: sc("tab.prev"), act: { run: ["tab.prev"] } },

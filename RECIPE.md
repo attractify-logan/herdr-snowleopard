@@ -19,10 +19,11 @@ Top to bottom:
   pulsing red dot when one is blocked), a Wi-Fi fan for machines (only with
   more than one machine; dimmed if any is unavailable), the clock ("Fri 1:03
   PM"), the user's name, and Spotlight (a blue square, `#4e8de8` → `#1b5fd2`).
-- **Desktop**: `mods/snowleopard/img/aurora.jpg` (cover), with 12 px top and
-  bottom and 20 px side padding around the window.
+- **Desktop**: `mods/snowleopard/img/aurora.jpg` (cover). The window is
+  zoomed by default (20 px side and 12 px top/bottom margins) and can be
+  placed anywhere on it.
 - **Window** (radius 5, `shadow: lg`, 1 px `#00000070` border):
-  - **Title bar and toolbar** (58 px, drags the window): `#e9e9e9` → `#a6a6a6`
+  - **Title bar and toolbar** (58 px, moves the Aqua window on the desktop): `#e9e9e9` → `#a6a6a6`
     when key, `#f7f7f7` → `#d6d6d6` when not, with a `#525252` bottom line.
     Glossy 14 px traffic lights 8 px from the left; a centered title (folder
     proxy icon + "space — tab", embossed). Toolbar: ◀▶ (previous/next tab),
@@ -80,7 +81,14 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   Machines preferences), the clock (the full date), the user (switch
   layout), and Spotlight (the command palette).
 - **Traffic lights** go gray when the window isn't key and show ×, − and +
-  when hovered. They close, minimize and zoom the Herdr window.
+  when hovered. Red closes and yellow minimizes the Herdr window. Green
+  zooms the Aqua window to fill the desktop, or puts it back where it was.
+- **Moving and resizing**: drag the title bar, the toolbar's bare parts or
+  the bottom bar to move the window (clamped to the desktop); drag the
+  bottom-right grip to resize it (minimum 520×300). Double-click the title to
+  zoom. Dragging a zoomed window un-zooms it to its last size (or 72%×78% of
+  the desktop) under the pointer. Placement survives restarts. The menu bar
+  moves the Herdr app window itself.
 - **Sidebar**: click a space or agent to go to it; right-click a space (or use
   the bottom gear) for its tabs, Open, New Tab Here, Rename…, Show in Finder
   and Close Space…. Click a heading to fold it.
@@ -97,15 +105,23 @@ Ocean and Novel, using Terminal.app's ANSI palette.
 - `layouts/snowleopard.json`: a root column (`titlebar: none`,
   `traffic_lights: [-200, -200]` to push macOS's own buttons off the window,
   `theme: snowleopard-pro`, Menlo 13, Lucida Grande, aurora background)
-  containing: `menubar` block → `desktop` column (padding [12, 20]) → `window`
-  column [`titlebar` block, `body` row [`sidebar` block, `content` column
+  containing: `menubar` block → `desktop` column (not resizable) [`desk-top`
+  block, `desk-row` row [`desk-left` block, `window` column, `desk-right`
+  block], `desk-bottom` block]. The desk blocks are the mod's `desk` role
+  (transparent; they report their sizes). `window` is a column [`titlebar` block, `body` row [`sidebar` block, `content` column
   [`tabs` block, `main` block `{tab: "active"}` with pane gap 1 and a
   `snowleopard` header `{role: "pane"}` (19 px, top, always, `lone: false`)]],
-  `statusbar` block] → `dock` block (92 px).
+  `statusbar` block] → `dock` block (92 px). Zoomed, `window` and `desk-row`
+  have weight 1 and the desk blocks are margins; placed, `window` and
+  `desk-row` have px sizes, `desk-left`/`desk-top` hold the position, and
+  `desk-right`/`desk-bottom` take weight 1. Everything goes through
+  `layout.resize`.
 - `mods/snowleopard/`: one mod, `props.role` picks the part: `menubar`,
   `titlebar`, `sidebar`, `tabs`, `pane`, `status`, `dock`, plus overlays
   `menu` (popup, `frame: "none"`) and `sheet` (dialog: confirm, closetab,
-  closespace, about, forcequit). `kit.js` draws Aqua: px `PathBuilder` rounded
+  closespace, about, forcequit), `desk`, and `drag` (a full-window
+  `kind: "window"` overlay opened on a title or grip press that receives
+  every pointer move and resizes the spacers until mouse up). `kit.js` draws Aqua: px `PathBuilder` rounded
   rects and ovals painted with `window.paint_path` and linear gradients
   (GPUI doesn't clip gradients to rounded boxes, so parts measure themselves
   with `on_size_change`), glass beads, textured segmented buttons, gel buttons,
@@ -145,6 +161,12 @@ Ocean and Novel, using Terminal.app's ANSI palette.
 - Lucida Grande ships with macOS; elsewhere the UI falls back to the default
   font, and the Apple glyph doesn't render.
 - Picking a terminal profile writes the layout root's `theme` with `layout.set`.
+- `layout()` doesn't reflect `layout.resize` clicks (they live in
+  `layouts/.state/`), so the window's placement is tracked in shared
+  `sl.placed` instead of being read back from the layout.
+- An element's `on_mouse_move` only fires while the pointer is over it, so
+  dragging uses the full-window `drag` overlay; the title bar alone would
+  lose the pointer on a fast move.
 
 ## Done when
 
@@ -155,8 +177,11 @@ Ocean and Novel, using Terminal.app's ANSI palette.
 - With an agent working, the sidebar, tab, Dock light and menu extra all show
   the spinner or count. A blocked agent bounces its space's Dock folder and
   adds a red badge.
-- The traffic lights close, minimize and zoom the real window; with Herdr in
-  the background they're gray and the selections turn graphite.
+- Red and yellow close and minimize the real window; green zooms the Aqua
+  window to fill the desktop and back. With Herdr in the background the lights
+  are gray and the selections turn graphite.
+- Dragging the title bar moves the window and the grip resizes it, both
+  staying on the desktop; the placement is kept after a restart.
 - File › Close Tab opens an Aqua alert, and only Close ends the tab.
 - `herdr-app do snowleopard.about` shows About Herdr with the app and core
   versions.

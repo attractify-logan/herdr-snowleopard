@@ -14,7 +14,12 @@ button and Dock icon runs a real Herdr command.
   an agents menu, a machines status icon, the clock, a layout switcher and
   Spotlight (the command palette).
 - **Window.**
-  - Glossy traffic lights close, minimize and zoom the window.
+  - It's a real window on the desktop: drag its title bar (or bottom bar) to
+    move it and the bottom-right grip to resize it. Green (or a double-click on
+    the title) zooms it to fill the desktop and back. Dragging a zoomed window
+    un-zooms it. The menu bar still moves the Herdr app window itself.
+  - Glossy traffic lights: red closes and yellow minimizes the Herdr window;
+    green zooms the Aqua window.
   - The toolbar has tab navigation, split and zoom controls, an action menu, a
     New menu that can start any installed agent, and a command search field.
 - **Source list.** Spaces are grouped by machine, with your agents below. A

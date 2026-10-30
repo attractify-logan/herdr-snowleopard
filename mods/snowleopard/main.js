@@ -9,6 +9,8 @@
 //   dock      the Dock
 //   menu      a menu (an overlay)
 //   sheet     alerts, About, Force Quit (overlays)
+//   desk      bare desktop around the window (the desk-* spacers)
+//   drag      moves or resizes the window while the button is down (an overlay)
 
 import { View, div } from "gpui-kit";
 import { props, nextCommand } from "herdr";
@@ -21,9 +23,11 @@ import StatusBar from "./status.js";
 import Dock from "./dock.js";
 import Menu from "./menu.js";
 import Sheet from "./sheet.js";
+import Desk from "./desk.js";
+import Drag from "./drag.js";
 import { openSheet } from "./kit.js";
 
-const ROLES = { menubar: MenuBar, titlebar: TitleBar, sidebar: Sidebar, tabs: Tabs, pane: PaneHeader, status: StatusBar, dock: Dock, menu: Menu, sheet: Sheet };
+const ROLES = { menubar: MenuBar, titlebar: TitleBar, sidebar: Sidebar, tabs: Tabs, pane: PaneHeader, status: StatusBar, dock: Dock, menu: Menu, sheet: Sheet, desk: Desk, drag: Drag };
 
 // Key commands ("snowleopard.<command>" in keys.json), taken by the menu bar's copy.
 const COMMANDS = {

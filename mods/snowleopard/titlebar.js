@@ -10,6 +10,7 @@ import { h_flex } from "gpui-base";
 import { spaces, focused, panes, run, knownAgents, window as appWindow } from "herdr";
 import {
   C, GLYPH, ICON, key, paint, rrect, vgrad, embossed, bead, textured, openMenu, closeMenus, shortcut, shown,
+  startDrag, toggleZoom, reportSize,
 } from "./kit.js";
 
 const TITLE = 22;
@@ -32,7 +33,7 @@ export default class TitleBar {
     const kinds = [
       ["close", "window.close", GLYPH.close, "Close Window"],
       ["min", "window.minimize", GLYPH.minus, "Minimize"],
-      ["zoom", "window.maximize", GLYPH.plus, "Zoom"],
+      ["zoom", null, GLYPH.plus, "Zoom"],
     ];
     return h_flex()
       .id("lights")
@@ -51,7 +52,7 @@ export default class TitleBar {
             .child(bead(on ? kind : "off", 14, this.lit ? glyph : null))
             .tooltip(tip)
             .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-            .on_click(() => run(command)),
+            .on_click(() => (command ? run(command) : toggleZoom(this.size?.width))),
         ),
       );
   }
@@ -135,7 +136,15 @@ export default class TitleBar {
       .id("root")
       .on_size_change((size, cx) => {
         this.size = size;
+        reportSize("window", size);
         cx.notify();
+      })
+      // Drag the title bar (or the toolbar's bare parts) to move the window; double-click zooms it.
+      .on_mouse_down("left", (e, cx) => {
+        closeMenus();
+        if (e.click_count >= 2) toggleZoom(this.size?.width);
+        else startDrag("move", e, this.size?.width);
+        cx.stop_propagation();
       })
       .relative()
       .size_full()
