@@ -360,7 +360,7 @@ export default class MenuBar {
           .h_full()
           .items_center()
           .child(this.title("agents", agentsExtra, { px: 7 }))
-          .when(ms.length > 1, (el) => el.child(this.title("machines", (on) => glyph(GLYPH.wifi, on, 18, 14, !allUp), { px: 7 })))
+          .when(ms.length > 1, (el) => el.child(this.title("machines", (on) => glyph(GLYPH.wifi, on, 16, 14, !allUp), { px: 7 })))
           .child(this.title("clock", clock(this.now), { px: 8 }))
           .child(this.title("user", userName(), { px: 8 }))
           .child(
