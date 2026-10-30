@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0d1240"/><stop offset=".55" stop-color="#5b2a9e"/><stop offset="1" stop-color="#150b2c"/></linearGradient>
+<linearGradient id="bar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f8f8f8"/><stop offset="1" stop-color="#d3d3d3"/></linearGradient>
+<linearGradient id="title" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9e9e9"/><stop offset="1" stop-color="#a6a6a6"/></linearGradient>
+<linearGradient id="sel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5f95d9"/><stop offset="1" stop-color="#2361c1"/></linearGradient>
+</defs>
+<rect width="320" height="200" fill="url(#sky)"/>
+<path d="M0 170C80 150 140 90 320 40" stroke="#e7a6f0" stroke-width="6" fill="none" opacity=".5"/>
+<rect width="320" height="9" fill="url(#bar)"/><text x="6" y="7" font-size="6" font-family="Lucida Grande" font-weight="bold">  Herdr  File  Edit  View  Window  Help</text>
+<rect x="10" y="15" width="300" height="152" rx="3" fill="#000" stroke="#333"/>
+<path d="M10 18a3 3 0 0 1 3-3h294a3 3 0 0 1 3 3v20H10z" fill="url(#title)"/>
+<circle cx="18" cy="20" r="2.6" fill="#e0443e"/><circle cx="25" cy="20" r="2.6" fill="#dea123"/><circle cx="32" cy="20" r="2.6" fill="#62b142"/>
+<rect x="16" y="27" width="20" height="8" rx="2" fill="#f4f4f4" stroke="#666" stroke-width=".5"/><rect x="40" y="27" width="34" height="8" rx="2" fill="#f4f4f4" stroke="#666" stroke-width=".5"/>
+<rect x="250" y="28" width="54" height="7" rx="3.5" fill="#fff" stroke="#777" stroke-width=".5"/>
+<rect x="10" y="38" width="62" height="121" fill="#dee4ea"/>
+<rect x="10" y="50" width="62" height="7" fill="url(#sel)"/>
+<g fill="#646f7c" font-size="4" font-family="Lucida Grande" font-weight="bold"><text x="13" y="45">THIS MAC</text><text x="13" y="72">AGENTS</text></g>
+<rect x="72" y="38" width="238" height="7" fill="#bdbdbd"/>
+<g fill="#f2f2f2" font-family="Menlo" font-size="5"><text x="76" y="54">$ claude</text><text x="76" y="62" fill="#25bc24">✓ tests pass</text></g>
+<rect x="10" y="159" width="300" height="8" fill="#b8b8b8"/>
+<path d="M118 196l6-10h72l6 10z" fill="#dfe6f2" opacity=".7"/>
+<rect x="128" y="176" width="12" height="12" rx="2" fill="#f3efe6"/><rect x="144" y="176" width="12" height="12" rx="2" fill="#7fb6ee"/><rect x="160" y="176" width="12" height="12" rx="2" fill="#c7ced8"/><rect x="180" y="176" width="10" height="12" rx="2" fill="#aab2bb"/>
+</svg>

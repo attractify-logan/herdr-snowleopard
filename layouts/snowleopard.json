@@ -1,0 +1,49 @@
+{
+  "id": "root",
+  "type": "column",
+  "titlebar": "none",
+  "traffic_lights": [-200, -200],
+  "preview": "layouts/snowleopard.svg",
+  "theme": "snowleopard-pro",
+  "font": "Menlo",
+  "font_size": 13,
+  "ui_font": "Lucida Grande",
+  "terminal_padding": [6, 4],
+  "terminal_opacity": 1,
+  "background": { "image": "mods/snowleopard/img/aurora.jpg", "fit": "cover" },
+  "children": [
+    { "id": "menubar", "type": "block", "size": { "px": 22 }, "window_drag": true,
+      "content": { "mod": "snowleopard", "props": { "role": "menubar" } } },
+    { "id": "desktop", "type": "column", "padding": [12, 20],
+      "children": [
+        { "id": "window", "type": "column", "radius": 5, "shadow": "lg",
+          "border": { "width": 1, "color": "#00000070" },
+          "children": [
+            { "id": "titlebar", "type": "block", "size": { "px": 58 }, "window_drag": true,
+              "content": { "mod": "snowleopard", "props": { "role": "titlebar" } } },
+            { "id": "body", "type": "row", "divider": { "width": 1, "color": "#8b8b8b" },
+              "children": [
+                { "id": "sidebar", "type": "block", "size": { "px": 210 }, "min": 150, "max": 420,
+                  "content": { "mod": "snowleopard", "props": { "role": "sidebar" } } },
+                { "id": "content", "type": "column", "resizable": false,
+                  "children": [
+                    { "id": "tabs", "type": "block", "size": { "px": 24 },
+                      "content": { "mod": "snowleopard", "props": { "role": "tabs" } } },
+                    { "id": "main", "type": "block", "background": "#8b8b8b",
+                      "content": { "tab": "active",
+                        "pane": { "gap": 1, "radius": 0, "background": "background",
+                                  "border": { "width": 0, "color": "#8b8b8b" },
+                                  "focus": { "width": 0, "color": "#5b93e3" },
+                                  "header": { "content": { "mod": "snowleopard", "props": { "role": "pane" } },
+                                              "height": 19, "position": "top", "reveal": "always" },
+                                  "lone": false } } }
+                  ] }
+              ] },
+            { "id": "statusbar", "type": "block", "size": { "px": 23 },
+              "content": { "mod": "snowleopard", "props": { "role": "status" } } }
+          ] }
+      ] },
+    { "id": "dock", "type": "block", "size": { "px": 92 },
+      "content": { "mod": "snowleopard", "props": { "role": "dock" } } }
+  ]
+}
