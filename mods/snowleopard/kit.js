@@ -516,7 +516,7 @@ export function openSheet(kind, p = {}) {
   });
 }
 
-/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn }. */
+/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen }. */
 export function perform(act) {
   if (!act) return;
   if (act.run) run(act.run[0], act.run[1] ?? {});
@@ -524,6 +524,7 @@ export function perform(act) {
   if (act.open) exec("open", [act.open]).catch(() => {});
   if (act.toggle) run("layout.toggle", { id: act.toggle });
   if (act.look) setLook(act.look);
+  if (act.fullscreen) window.toggle_fullscreen();
   if (act.newSpaceIn)
     pickFolder({ prompt: "New Space" })
       .then((folder) => folder && run("space.new", { folder }))

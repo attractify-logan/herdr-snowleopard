@@ -7,6 +7,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import {
   spaces, agents, machines, layouts, shared, settings, home, run, knownAgents, focused, updates,
+  window as appWindow,
 } from "herdr";
 import {
   C, FONT, GLYPH, ICON, paint, rrect, vgrad, fillGrad, openMenu, closeMenus, shortcut, shown, plural,
@@ -156,6 +157,8 @@ export default class MenuBar {
         const look = settings()?.theme;
         const cur = typeof look === "string" ? look : null;
         return [
+          { label: appWindow()?.fullscreen ? "Exit Full Screen" : "Enter Full Screen", shortcut: sc("snowleopard.fullscreen"), act: { fullscreen: true } },
+          { sep: true },
           { label: shown("sidebar") ? "Hide Sidebar" : "Show Sidebar", shortcut: sc("layout.toggle:sidebar"), act: { toggle: "sidebar" } },
           { label: shown("tabs") ? "Hide Tab Bar" : "Show Tab Bar", act: { toggle: "tabs" } },
           { label: shown("statusbar") ? "Hide Status Bar" : "Show Status Bar", act: { toggle: "statusbar" } },

@@ -27,6 +27,8 @@ button and Dock icon runs a real Herdr command.
   asking first.
 - **Aqua dialogs.** Close confirmations, About Herdr, and Force Quit (end any
   terminal).
+- **Full screen.** View › Enter Full Screen (⌃⌘F with the keys below) fills the
+  display with the whole desktop: menu bar, window and Dock.
 - **Terminal profiles.** Choose Basic, Pro, Homebrew, Ocean or Novel under
   View › Terminal Profile.
 
@@ -47,7 +49,8 @@ herdr-app do layout.switch --name snowleopard
 "layout:snowleopard": {
   "ctrl-f2": "snowleopard.menus",
   "cmd-alt-escape": "snowleopard.forcequit",
-  "cmd-m": "window.minimize"
+  "cmd-m": "window.minimize",
+  "ctrl-cmd-f": "snowleopard.fullscreen"
 }
 ```
 

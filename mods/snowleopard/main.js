@@ -29,6 +29,7 @@ const ROLES = { menubar: MenuBar, titlebar: TitleBar, sidebar: Sidebar, tabs: Ta
 const COMMANDS = {
   about: () => openSheet("about"),
   forcequit: () => openSheet("forcequit"),
+  fullscreen: () => window.toggle_fullscreen(),
 };
 
 export default class SnowLeopard extends View {

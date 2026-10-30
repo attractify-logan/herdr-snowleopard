@@ -73,7 +73,7 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   with Agent (installed agents), splits, close pane/tab/space (tab and space
   ask first), rename, Show in Finder. **Edit**: copy, paste, paste image,
   Find Command (palette). **View**: show or hide the sidebar, tab bar, status
-  bar and Dock; zoom; terminal profile; layout. **Window**: minimize, zoom,
+  bar and Dock; Enter/Exit Full Screen (gpui's `window.toggle_fullscreen()`); zoom; terminal profile; layout. **Window**: minimize, zoom,
   next/previous tab and space, zoom pane, and the space's tabs (checked,
   ⌘1–9). **Help**: Herdr Help, What's New, Welcome, Send Feedback.
 - **Menu extras**: agents (click one to focus it), machines (status, then
@@ -125,7 +125,7 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   folder, Terminal and Trash; one-color glyphs tinted with `svg()`).
 - Optional keys (`keys.json`, section `layout:snowleopard`):
   `"ctrl-f2": "snowleopard.menus"`, `"cmd-alt-escape": "snowleopard.forcequit"`,
-  `"cmd-m": "window.minimize"`. Mod commands: `snowleopard.apple|app|file|edit|view|window|help|menus|about|forcequit`.
+  `"cmd-m": "window.minimize"`, `"ctrl-cmd-f": "snowleopard.fullscreen"`. Mod commands: `snowleopard.apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen`.
 
 ## Watch out
 
