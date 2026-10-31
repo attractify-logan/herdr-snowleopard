@@ -10,7 +10,7 @@ import {
   window as appWindow,
 } from "herdr";
 import {
-  C, FONT, GLYPH, ICON, paint, rrect, vgrad, fillGrad, openMenu, closeMenus, shortcut, shown, plural,
+  C, FONT, GLYPH, ICON, paint, rrect, vgrad, fillGrad, openMenu, closeMenus, shortcut, shown, plural, torn, tabInfo, canTear,
 } from "./kit.js";
 
 export const PROFILES = [
@@ -176,7 +176,10 @@ export default class MenuBar {
         ];
       }
       case "window": {
-        const tabs = (s?.tabs ?? []).filter((t) => !t.settled || t.active);
+        const out = torn();
+        const tabs = (s?.tabs ?? []).filter((t) => !out[t.id] && (!t.settled || t.active));
+        const cur = s?.tabs.find((t) => t.active && !out[t.id]);
+        const wins = Object.keys(out).map(tabInfo).filter(Boolean);
         return [
           { label: "Minimize", shortcut: sc("window.minimize"), act: { run: ["window.minimize"] } },
           { label: "Zoom", act: { zoomWindow: true } },
@@ -187,6 +190,9 @@ export default class MenuBar {
           { label: "Select Previous Space", shortcut: sc("space.prev"), act: { run: ["space.prev"] } },
           { label: "Zoom Pane", shortcut: sc("pane.zoom"), act: { run: ["pane.zoom", {}] }, disabled: !focused()?.pane },
           { sep: true },
+          { label: "Move Tab to New Window", disabled: !cur || !canTear(cur.id), act: { tearOff: cur?.id } },
+          { label: "Merge All Windows", disabled: !wins.length, act: { mergeAll: true } },
+          { sep: true },
           ...tabs.map((t) => ({
             label: t.name,
             detail: s?.name,
@@ -194,6 +200,12 @@ export default class MenuBar {
             shortcut: t.index <= 9 ? sc(`tab.select:${t.index}`) : "",
             act: { run: ["tab.select", { id: t.id }] },
           })),
+          ...(wins.length
+            ? [
+                { sep: true },
+                ...wins.map((w) => ({ label: w.tab.named ? w.tab.name : `Tab ${w.tab.name}`, detail: out[w.tab.id].min ? "in the Dock" : w.space.name, act: { raise: w.tab.id } })),
+              ]
+            : []),
         ];
       }
       case "help":

@@ -1,12 +1,13 @@
 // Terminal's tab bar: equal tabs on a recessed graphite strip, the shown tab
 // lifted to the toolbar's gray. Each tab: a close button on hover (left), its
 // agent mark, its name, its ⌘ number. + at the end; a double-click on the
-// strip makes a tab; right-click a tab for its menu.
+// strip makes a tab; right-click a tab for its menu. Drag a tab down out of
+// the strip to tear it off into its own window.
 
 import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, run } from "herdr";
-import { C, FONT, GLYPH, key, fillGrad, embossed, statusMark, openMenu, closeMenus, shortcut, tabClose } from "./kit.js";
+import { C, FONT, GLYPH, key, fillGrad, embossed, statusMark, openMenu, closeMenus, shortcut, tabClose, torn, canTear, startTear } from "./kit.js";
 
 export default class Tabs {
   init() {
@@ -23,6 +24,7 @@ export default class Tabs {
       { label: "Move Tab Right", disabled: t.index >= s.tabs.length, act: { run: ["tab.move", { id: t.id, index: t.index + 1 }] } },
       { sep: true },
       { label: "New Tab", shortcut: sc("tab.new"), act: { run: ["tab.new", { space: s.id }] } },
+      { label: "Move Tab to New Window", disabled: !canTear(t.id), act: { tearOff: t.id } },
       { sep: true },
       { label: "Close Tab…", act: { sheet: ["closetab", { tab: t.id }] } },
     ];
@@ -32,7 +34,8 @@ export default class Tabs {
   render(_cx) {
     const live = key();
     const s = spaces().find((x) => x.active);
-    const tabs = (s?.tabs ?? []).filter((t) => !t.settled || t.active);
+    const out = torn();
+    const tabs = (s?.tabs ?? []).filter((t) => !out[t.id] && (!t.settled || t.active));
     const edge = live ? "#7e7e7e" : "#acacac";
     const tab = (t, i) => {
       const on = t.active;
@@ -85,7 +88,12 @@ export default class Tabs {
           this.hover = h ? t.id : this.hover === t.id ? null : this.hover;
           cx.notify();
         })
-        .on_click(() => run("tab.select", { id: t.id }))
+        // Select on press, as Terminal does; then watch for a drag down and out.
+        .on_mouse_down("left", (e) => {
+          if (e.click_count >= 2) return;
+          run("tab.select", { id: t.id });
+          if (canTear(t.id)) startTear(t.id, e);
+        })
         .on_mouse_down("right", (e, cx) => {
           cx.stop_propagation();
           this.menu(s, t, e);

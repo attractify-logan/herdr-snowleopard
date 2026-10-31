@@ -4,14 +4,15 @@
 // shelf under every space that's running an agent (brighter under the shown
 // one); a red count badge for agents that finished or need you, and a
 // space with a blocked agent bounces until you look. Hover shows the name,
-// click opens, right-click lists its tabs.
+// click opens, right-click lists its tabs. Minimized torn-off windows wait
+// between the separator and the Trash; click one to bring it back.
 
 import { div, image, PathBuilder } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, agents, run, shared } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, oval, vgrad, programIcon, leadProgram, countBadge, openMenu, closeMenus, menuSize,
-  spaceItems, shortcut,
+  spaceItems, shortcut, torn, tabInfo, restoreTorn,
 } from "./kit.js";
 
 const ICON_SIZE = 48;
@@ -52,6 +53,12 @@ export default class Dock {
       });
     }
     list.push({ kind: "sep", id: "sep" });
+    const out = torn();
+    for (const [id, w] of Object.entries(out)) {
+      const info = w.min ? tabInfo(id) : null;
+      if (!info) continue;
+      list.push({ kind: "win", id: `win-${id}`, tab: id, label: `${info.space.name} — ${info.tab.named ? info.tab.name : `Tab ${info.tab.name}`}`, program: leadProgram(info.space.id, id) });
+    }
     list.push({ kind: "trash", id: "trash", label: "Trash" });
     return list;
   }
@@ -76,6 +83,7 @@ export default class Dock {
     const s = ICON_SIZE;
     if (it.kind === "app") return image(ICON.herdr).w(s).h(s);
     if (it.kind === "trash") return image(ICON.trash).w(s).h(s);
+    if (it.kind === "win") return miniWindow(s, it.program);
     const sp = it.space;
     const agent = it.program && !it.program.shell && it.program.key !== "shell";
     // The folder, its initials engraved on the front like Applications' "A".
@@ -147,6 +155,14 @@ export default class Dock {
       .on_mouse_down("right", (e, cx) => {
         cx.stop_propagation();
         if (it.kind === "space") this.menuAbove(spaceItems(it.space), e.bounds);
+        if (it.kind === "win")
+          this.menuAbove(
+            [
+              { label: "Show", act: { raise: it.tab } },
+              { label: "Put Back in Main Window", act: { putBack: it.tab } },
+            ],
+            e.bounds,
+          );
         if (it.kind === "trash") this.menuAbove(this.trashItems(), e.bounds);
       });
   }
@@ -154,6 +170,7 @@ export default class Dock {
   click(it) {
     if (it.kind === "app") return run("mod.open", { name: "picker" });
     if (it.kind === "space") run("space.select", { id: it.space.id });
+    if (it.kind === "win") restoreTorn(it.tab);
   }
 
   light(x, bright) {
@@ -214,6 +231,24 @@ export default class Dock {
       .font_family(FONT)
       .when(bw > 0, (el) => el.children(kids));
   }
+}
+
+/** A minimized window in the Dock: a tiny Aqua window, its program's icon badged on it. */
+function miniWindow(s, program) {
+  const w = s;
+  const h = s * 0.74;
+  const y = (s - h) / 2;
+  const agent = program && !program.shell && program.key !== "shell";
+  return div()
+    .relative()
+    .w(s)
+    .h(s)
+    .child(paint(rrect(w, h, 3, 0, y), "#00000080", s, s))
+    .child(paint(rrect(w - 2, 9, [2, 2, 0, 0], 1, y + 1), vgrad("#e9e9e9", "#a6a6a6"), s, s))
+    .child(paint(rrect(w - 2, h - 11, [0, 0, 2, 2], 1, y + 10), "#141414", s, s))
+    .children(["#ff6a5c", "#ffc130", "#5fcf3f"].map((c, i) => div().absolute().top(y + 3).left(4 + i * 5).w(3).h(3).rounded_full().bg(c)))
+    .child(div().absolute().top(y + 13).left(4).text_size(6).font_family("Menlo").text_color("#c8c8c8").child("$ _"))
+    .when(agent, (el) => el.child(div().absolute().bottom(-1).right(-3).child(programIcon(program, s * 0.42, { small: true }))));
 }
 
 /** The shelf's top surface: narrower at the back, full width at the front. */

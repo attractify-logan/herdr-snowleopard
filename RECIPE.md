@@ -75,8 +75,8 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   ask first), rename, Show in Finder. **Edit**: copy, paste, paste image,
   Find Command (palette). **View**: show or hide the sidebar, tab bar, status
   bar and Dock; Enter/Exit Full Screen (gpui's `window.toggle_fullscreen()`); zoom; terminal profile; layout. **Window**: minimize, zoom,
-  next/previous tab and space, zoom pane, and the space's tabs (checked,
-  ⌘1–9). **Help**: Herdr Help, What's New, Welcome, Send Feedback.
+  next/previous tab and space, zoom pane, Move Tab to New Window, Merge All
+  Windows, the space's tabs (checked, ⌘1–9), and the torn-off windows. **Help**: Herdr Help, What's New, Welcome, Send Feedback.
 - **Menu extras**: agents (click one to focus it), machines (status, then
   Machines preferences), the clock (the full date), the user (switch
   layout), and Spotlight (the command palette).
@@ -89,6 +89,16 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   zoom. Dragging a zoomed window un-zooms it to its last size (or 72%×78% of
   the desktop) under the pointer. Placement survives restarts. The menu bar
   moves the Herdr app window itself.
+- **More windows**: drag a tab down out of the tab bar (or pick Move Tab to
+  New Window from its right-click menu or the Window menu) and it becomes its
+  own Aqua window over the desktop, its terminals live inside. Drag the title
+  to move it; the window holding the keyboard is key and the others go gray.
+  Red puts the tab back in the main window, yellow minimizes it into the
+  Dock (between the separator and the Trash, as a tiny window; click to
+  restore), green or a double-click zooms it. Window › Merge All Windows
+  brings every tab back, and lists the open ones to bring forward. Clicking a
+  torn-off agent in the sidebar raises its window. The space's last tab
+  stays in the main window. Torn-off windows survive restarts.
 - **Sidebar**: click a space or agent to go to it; right-click a space (or use
   the bottom gear) for its tabs, Open, New Tab Here, Rename…, Show in Finder
   and Close Space…. Click a heading to fold it.
@@ -119,9 +129,16 @@ Ocean and Novel, using Terminal.app's ANSI palette.
 - `mods/snowleopard/`: one mod, `props.role` picks the part: `menubar`,
   `titlebar`, `sidebar`, `tabs`, `pane`, `status`, `dock`, plus overlays
   `menu` (popup, `frame: "none"`) and `sheet` (dialog: confirm, closetab,
-  closespace, about, forcequit), `desk`, and `drag` (a full-window
+  closespace, about, forcequit), `desk`, `aqua` (a torn-off window's title
+  bar), and `drag` (a full-window
   `kind: "window"` overlay opened on a title or grip press that receives
-  every pointer move and resizes the spacers until mouse up). `kit.js` draws Aqua: px `PathBuilder` rounded
+  every pointer move and resizes the spacers until mouse up, or tears a
+  pressed tab off once it's pulled 28 px out of the strip). A torn-off tab is
+  an overlay window (`kind: "window"`, `frame: "none"`, `key: "sl-win-<tab>"`,
+  `keep: true`) holding a layout: the `aqua` title bar block over its
+  terminals' `{terminal}` blocks; the tab is `tab.settle`d while it's out and
+  `tab.unsettle`d when it comes back. Shared `sl.windows` tracks them
+  (`min`, `big`). `kit.js` draws Aqua: px `PathBuilder` rounded
   rects and ovals painted with `window.paint_path` and linear gradients
   (GPUI doesn't clip gradients to rounded boxes, so parts measure themselves
   with `on_size_change`), glass beads, textured segmented buttons, gel buttons,
@@ -141,7 +158,7 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   folder, Terminal and Trash; one-color glyphs tinted with `svg()`).
 - Optional keys (`keys.json`, section `layout:snowleopard`):
   `"ctrl-f2": "snowleopard.menus"`, `"cmd-alt-escape": "snowleopard.forcequit"`,
-  `"cmd-m": "window.minimize"`, `"ctrl-cmd-f": "snowleopard.fullscreen"`. Mod commands: `snowleopard.apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen`.
+  `"cmd-m": "window.minimize"`, `"ctrl-cmd-f": "snowleopard.fullscreen"`. Mod commands: `snowleopard.apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall`.
 
 ## Watch out
 
@@ -182,6 +199,9 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   are gray and the selections turn graphite.
 - Dragging the title bar moves the window and the grip resizes it, both
   staying on the desktop; the placement is kept after a restart.
+- `snowleopard.tearoff` moves the shown tab to its own window (gone from the
+  tab bar, `settled`); yellow puts it in the Dock and clicking it there brings
+  it back; `snowleopard.mergeall` puts every tab back, unsettled.
 - File › Close Tab opens an Aqua alert, and only Close ends the tab.
 - `herdr-app do snowleopard.about` shows About Herdr with the app and core
   versions.

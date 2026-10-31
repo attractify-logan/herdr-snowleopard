@@ -20,6 +20,10 @@ button and Dock icon runs a real Herdr command.
     un-zooms it. The menu bar still moves the Herdr app window itself.
   - Glossy traffic lights: red closes and yellow minimizes the Herdr window;
     green zooms the Aqua window.
+  - Tear a tab off into its own window by dragging it down out of the tab bar
+    (or with Move Tab to New Window). Each torn-off window has its own lights:
+    red puts the tab back, yellow minimizes it into the Dock, green zooms it.
+    Window › Merge All Windows brings them all back.
   - The toolbar has tab navigation, split and zoom controls, an action menu, a
     New menu that can start any installed agent, and a command search field.
 - **Source list.** Spaces are grouped by machine, with your agents below. A

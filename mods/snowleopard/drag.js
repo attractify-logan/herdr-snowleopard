@@ -3,12 +3,14 @@
 // over the whole app window, so it gets every pointer move until the button
 // comes up, wherever the pointer goes. Each move resizes the desktop's
 // spacers (desk-left, desk-top) or the window itself (window, desk-row).
-// props { mode: "move" | "resize", start: {x, y}, frame }.
+// props { mode: "move" | "resize", start: {x, y}, frame }, or { mode: "tear",
+// tab, start }: a tab pressed in the tab bar, torn off into its own window
+// once it's pulled 28 px down or up out of the strip.
 
 import { div } from "gpui-kit";
 import { props, closeOverlay } from "herdr";
 import { shared } from "herdr";
-import { applyFrame, setSavedFrame, desktopLimits, MIN_W, MIN_H } from "./kit.js";
+import { applyFrame, setSavedFrame, desktopLimits, tearOff, MIN_W, MIN_H } from "./kit.js";
 
 export default class Drag {
   init() {
@@ -19,7 +21,14 @@ export default class Drag {
 
   move(e) {
     const p = props() ?? {};
-    if (!this.size || !p.start) return;
+    if (!p.start) return;
+    if (p.mode === "tear") {
+      if (this.done || Math.abs(e.position.y - p.start.y) < 28) return;
+      this.done = true;
+      tearOff(p.tab, { x: Math.max(0, Math.round(e.position.x - 120)), y: Math.max(0, Math.round(e.position.y - 11)) });
+      return this.end();
+    }
+    if (!this.size) return;
     const lim = desktopLimits(this.size);
     this.frame ??= this.startFrame(p, lim);
     const f = this.frame;

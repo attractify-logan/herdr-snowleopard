@@ -7,10 +7,11 @@
 
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { spaces, agents, machines, run, setAgentOrder } from "herdr";
+import { spaces, agents, machines, panes, run, setAgentOrder } from "herdr";
 import {
   C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, pill, statusMark, programIcon, openMenu,
   closeMenus, textured, menuSize, spaceItems,
+  torn, raiseTorn,
 } from "./kit.js";
 
 const ROW = 22;
@@ -137,7 +138,11 @@ export default class Sidebar {
               icon: programIcon(a.program, 16, { small: true }),
               label: name,
               mark: statusMark(a.status, { selected: a.focused }),
-              onClick: () => run("agent.focus", { terminal: a.address }),
+              onClick: () => {
+                const t = panes().find((x) => x.terminal === a.address)?.tab;
+                if (t && torn()[t]) raiseTorn(t);
+                else run("agent.focus", { terminal: a.address });
+              },
             }).tooltip(`${a.program?.name ?? "Agent"} in ${a.space_name} — ${a.title || a.address}`),
           );
         }
