@@ -92,7 +92,7 @@ export default class Tabs {
         .on_mouse_down("left", (e) => {
           if (e.click_count >= 2) return;
           run("tab.select", { id: t.id });
-          if (canTear(t.id)) startTear(t.id, e);
+          if (canTear(t.id)) startTear(t.id, e, t.name);
         })
         .on_mouse_down("right", (e, cx) => {
           cx.stop_propagation();

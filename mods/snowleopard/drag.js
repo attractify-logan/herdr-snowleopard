@@ -4,13 +4,16 @@
 // comes up, wherever the pointer goes. Each move resizes the desktop's
 // spacers (desk-left, desk-top) or the window itself (window, desk-row).
 // props { mode: "move" | "resize", start: {x, y}, frame }, or { mode: "tear",
-// tab, start }: a tab pressed in the tab bar, torn off into its own window
-// once it's pulled 28 px down or up out of the strip.
+// tab, name, start, bounds }: a tab pressed in the tab bar. As in Terminal,
+// a ghost of the tab follows the pointer; pulled 28 px out of the strip it
+// becomes a ghost window, and releasing there opens the tab's window under
+// the pointer. Released inside the strip, nothing happens.
 
 import { div } from "gpui-kit";
+import { h_flex } from "gpui-base";
 import { props, closeOverlay } from "herdr";
 import { shared } from "herdr";
-import { applyFrame, setSavedFrame, desktopLimits, tearOff, MIN_W, MIN_H } from "./kit.js";
+import { C, FONT, ICON, applyFrame, setSavedFrame, desktopLimits, tearOff, tearSpot, paint, rrect, vgrad, embossed, WIN, MIN_W, MIN_H } from "./kit.js";
 
 export default class Drag {
   init() {
@@ -19,14 +22,13 @@ export default class Drag {
     this.last = null;
   }
 
-  move(e) {
+  move(e, cx) {
     const p = props() ?? {};
     if (!p.start) return;
     if (p.mode === "tear") {
-      if (this.done || Math.abs(e.position.y - p.start.y) < 28) return;
-      this.done = true;
-      tearOff(p.tab, { x: Math.max(0, Math.round(e.position.x - 120)), y: Math.max(0, Math.round(e.position.y - 11)) });
-      return this.end();
+      this.pos = { x: e.position.x, y: e.position.y };
+      this.out = this.out || Math.abs(this.pos.y - p.start.y) >= 28;
+      return cx.notify();
     }
     if (!this.size) return;
     const lim = desktopLimits(this.size);
@@ -61,11 +63,75 @@ export default class Drag {
   }
 
   end() {
+    const p = props() ?? {};
+    if (p.mode === "tear" && this.out && this.pos && !this.done) {
+      this.done = true;
+      tearOff(p.tab, tearSpot(this.pos, this.grab(), this.size));
+    }
     if (this.now) setSavedFrame(this.now);
     closeOverlay(props()?.overlay);
   }
 
+  // How far into the ghost window's title the pointer holds it: where it held the tab, scaled.
+  grab() {
+    const b = props()?.bounds;
+    const s = props()?.start;
+    if (!b || !s || !b.width) return 120;
+    return Math.round(Math.min(0.9, Math.max(0.1, (s.x - b.x) / b.width)) * WIN.w * 0.5);
+  }
+
+  ghost() {
+    const p = props() ?? {};
+    if (!this.pos) return null;
+    if (!this.out) {
+      // The tab, lifted and following the pointer along the strip.
+      const b = p.bounds;
+      if (!b) return null;
+      const w = b.width;
+      const h = b.height;
+      return div()
+        .absolute()
+        .left(b.x + this.pos.x - p.start.x)
+        .top(b.y + this.pos.y - p.start.y)
+        .w(w)
+        .h(h)
+        .opacity(0.85)
+        .child(paint(rrect(w, h, 2), vgrad("#d8d8d8", "#bdbdbd"), w, h))
+        .child(div().absolute().top(0).left(0).w(w).h(h).border_1().border_color("#7e7e7e").rounded(2))
+        .child(div().absolute().top(0).left(0).size_full().flex().items_center().justify_center().child(embossed(p.name ?? "", { size: 11, color: "#000000", truncate: true })));
+    }
+    // The window to be: an Aqua title over a dark, see-through body.
+    const at = tearSpot(this.pos, this.grab(), this.size);
+    const w = WIN.w;
+    const h = WIN.h;
+    const t = WIN.title;
+    return div()
+      .absolute()
+      .left(at.x)
+      .top(at.y)
+      .w(w)
+      .h(h)
+      .opacity(0.8)
+      // A light rim so the shape reads over a black terminal too.
+      .child(paint(rrect(w, h, 5), "#ffffffa0", w, h))
+      .child(paint(rrect(w - 2, t - 1, [4, 4, 0, 0], 1, 1), vgrad(C.titleTop, C.titleBot), w, h))
+      .child(paint(rrect(w - 2, h - t - 1, [0, 0, 4, 4], 1, t), "#3a3d44d8", w, h))
+      .child(
+        h_flex()
+          .absolute()
+          .top(0)
+          .left(0)
+          .w(w)
+          .h(t)
+          .items_center()
+          .justify_center()
+          .font_family(FONT)
+          .child(embossed(p.name ?? "", { size: 13, color: "#000000", truncate: true })),
+      );
+  }
+
   render(_cx) {
+    const g = this.ghost();
     return div()
       .id("root")
       .on_size_change((size, cx) => {
@@ -73,8 +139,9 @@ export default class Drag {
         cx.notify();
       })
       .size_full()
+      .when(Boolean(g), (el) => el.child(g))
       .when(props()?.mode === "resize", (el) => el.cursor_nwse_resize())
-      .on_mouse_move((e) => this.move(e))
+      .on_mouse_move((e, cx) => this.move(e, cx))
       .on_mouse_up("left", () => this.end())
       .on_mouse_down("left", (_e, cx) => {
         cx.stop_propagation();

@@ -23,7 +23,9 @@ A tab can leave for its own window: an overlay window (`key: sl-win-<tab>`,
 `keep: true`) holding the `aqua` title bar over the tab's `{terminal}`
 blocks. The tab is settled while it's out and unsettled when it's put back;
 shared `sl.windows` records each one (`min` while it waits in the Dock,
-`big` when zoomed).
+`big` when zoomed, `at` where it sits). A tab bar press opens the `drag`
+overlay in `tear` mode: a ghost tab, then a ghost window, follows the pointer
+and the window opens where it's released.
 
 Keys (`keys.json`, section `layout:snowleopard`): `ctrl-f2` walks the menu
 bar menus, `cmd-alt-escape` Force Quit, `cmd-m` minimize, `ctrl-cmd-f` full screen. Mod commands:

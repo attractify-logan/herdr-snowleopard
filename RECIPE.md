@@ -89,16 +89,19 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   zoom. Dragging a zoomed window un-zooms it to its last size (or 72%×78% of
   the desktop) under the pointer. Placement survives restarts. The menu bar
   moves the Herdr app window itself.
-- **More windows**: drag a tab down out of the tab bar (or pick Move Tab to
-  New Window from its right-click menu or the Window menu) and it becomes its
-  own Aqua window over the desktop, its terminals live inside. Drag the title
-  to move it; the window holding the keyboard is key and the others go gray.
-  Red puts the tab back in the main window, yellow minimizes it into the
-  Dock (between the separator and the Trash, as a tiny window; click to
-  restore), green or a double-click zooms it. Window › Merge All Windows
-  brings every tab back, and lists the open ones to bring forward. Clicking a
-  torn-off agent in the sidebar raises its window. The space's last tab
-  stays in the main window. Torn-off windows survive restarts.
+- **More windows**: drag a tab down out of the tab bar, as in Terminal: the
+  tab follows the pointer, turns into a ghost window once it's 28 px out of
+  the strip, and on release the tab opens as its own Aqua window right there,
+  its terminals live inside (released inside the strip, nothing happens). Move
+  Tab to New Window (the tab's right-click menu, the Window menu) does the
+  same. Drag the title to move it. Red puts the tab back in the main window,
+  yellow minimizes it into the Dock (between the separator and the Trash, as a
+  tiny window; click to restore in the same spot), green or a double-click on
+  the title zooms it (centered in the app; again goes back where it was).
+  Window › Merge All Windows brings every tab back and lists the open ones to
+  bring forward. Clicking a torn-off agent in the sidebar raises its window.
+  The space's last tab stays in the main window. Torn-off windows survive
+  restarts. Every window looks key while Herdr is in front (see Watch out).
 - **Sidebar**: click a space or agent to go to it; right-click a space (or use
   the bottom gear) for its tabs, Open, New Tab Here, Rename…, Show in Finder
   and Close Space…. Click a heading to fold it.
@@ -135,10 +138,10 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   every pointer move and resizes the spacers until mouse up, or tears a
   pressed tab off once it's pulled 28 px out of the strip). A torn-off tab is
   an overlay window (`kind: "window"`, `frame: "none"`, `key: "sl-win-<tab>"`,
-  `keep: true`) holding a layout: the `aqua` title bar block over its
-  terminals' `{terminal}` blocks; the tab is `tab.settle`d while it's out and
-  `tab.unsettle`d when it comes back. Shared `sl.windows` tracks them
-  (`min`, `big`). `kit.js` draws Aqua: px `PathBuilder` rounded
+  `keep: true`; `sl-win-<tab>-big` when zoomed) holding a layout: the `aqua`
+  title bar block over its terminals' `{terminal}` blocks; the tab is
+  `tab.settle`d while it's out and `tab.unsettle`d when it comes back. Shared
+  `sl.windows` tracks them (`min`, `big`, `at`). `kit.js` draws Aqua: px `PathBuilder` rounded
   rects and ovals painted with `window.paint_path` and linear gradients
   (GPUI doesn't clip gradients to rounded boxes, so parts measure themselves
   with `on_size_change`), glass beads, textured segmented buttons, gel buttons,
@@ -181,6 +184,20 @@ Ocean and Novel, using Terminal.app's ANSI palette.
 - `layout()` doesn't reflect `layout.resize` clicks (they live in
   `layouts/.state/`), so the window's placement is tracked in shared
   `sl.placed` instead of being read back from the layout.
+- Herdr's `focused()` reports layout terminal blocks but not terminal blocks
+  inside overlay windows, so a mod can't tell which Aqua window has the
+  keyboard. Every window looks key while Herdr is in front, rather than the
+  typed-in one looking inactive. `pane.focus {terminal}` on a torn-off tab's
+  terminal focuses its model pane instead: it selects and unsettles the tab,
+  so the mod never calls it for torn-off tabs.
+- Reopening an overlay window by its key keeps its old spot whatever `at`
+  says, and Herdr remembers a spot only after a drag. Torn windows keep their
+  own `at` in `sl.windows` (noted on any press on the title or lights, since
+  Herdr keeps the release of a window drag), and the zoomed window has its own
+  key (`sl-win-<tab>-big`) so it can open centered.
+- While Herdr starts or quits, `spaces()` is briefly empty. A kept window that
+  closed itself then would drop out of `windows.json`'s kept list, so a torn
+  window closes itself only when its tab is put back.
 - An element's `on_mouse_move` only fires while the pointer is over it, so
   dragging uses the full-window `drag` overlay; the title bar alone would
   lose the pointer on a fast move.

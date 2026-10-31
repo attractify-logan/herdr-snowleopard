@@ -9,7 +9,7 @@
 import { div, svg, image, PathBuilder, Background } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import {
-  keys, openOverlay, closeOverlay, pickFolder, shared, setShared, run, exec, spaces, agents, panes, layout, focused,
+  keys, openOverlay, closeOverlay, pickFolder, shared, setShared, run, exec, spaces, agents, panes, layout,
   window as appWindow,
 } from "herdr";
 
@@ -88,10 +88,12 @@ export const GLYPH = {
   grip: `${A}/icons/grip.svg`,
 };
 
-/** Is the main Aqua window key? Inactive windows go flat and gray, as in Aqua.
- *  It isn't while a torn-off window's terminal has the keyboard. */
+/** Is the Herdr window key? Inactive windows go flat and gray, as in Aqua.
+ *  Torn-off windows go with it: Herdr doesn't report which overlay window's
+ *  terminal has the keyboard (focused() names only layout blocks), so every
+ *  Aqua window looks active while Herdr is in front. */
 export function key() {
-  return appWindow()?.active !== false && !tornTabOf(focused()?.terminal);
+  return appWindow()?.active !== false;
 }
 
 // ---- text
@@ -701,10 +703,11 @@ export function startDrag(mode, e, width) {
 // A tab can leave the main window for its own Aqua window: an overlay window
 // holding a title bar (the "aqua" role) over its terminals. The tab is settled
 // (out of the lists, still running) while it's out, and unsettled when it
-// comes back. Shared "sl.windows" = { [tab]: { min, big } }; minimized ones
-// wait in the Dock.
+// comes back. Shared "sl.windows" = { [tab]: { min, big, at } }; minimized
+// ones wait in the Dock. `at` is the window's top left: Herdr remembers a
+// window's spot only once it's dragged, so it's kept here to reopen in place.
 
-const WIN = { w: 660, h: 430, bigW: 0.86, bigH: 0.8, title: 22 };
+export const WIN = { w: 660, h: 430, bigW: 0.86, bigH: 0.8, title: 22 };
 
 export function torn() {
   return shared("sl.windows") ?? {};
@@ -712,14 +715,6 @@ export function torn() {
 
 function setTorn(map) {
   setShared("sl.windows", map);
-}
-
-/** The torn-off tab showing this terminal, if any. */
-export function tornTabOf(terminal) {
-  if (!terminal) return null;
-  const t = torn();
-  const p = panes().find((x) => x.terminal === terminal);
-  return p && t[p.tab] && !t[p.tab].min ? p.tab : null;
 }
 
 /** The tab, its space and its terminals. */
@@ -744,15 +739,18 @@ function openTorn(tabId, o = {}) {
   if (!info) return false;
   const cell = (terminal) => ({ type: "block", content: { terminal }, background: "background", padding: [4, 6] });
   const terms = info.terminals;
+  // Zoomed, it opens centered; otherwise where it was.
+  const at = o.big ? zoomedSpot() : o.at ?? torn()[tabId]?.at;
   const body = terms.length === 1 ? { ...cell(terms[0]), size: { weight: 1 } } : { type: "row", size: { weight: 1 }, divider: { width: 1, color: "#8b8b8b" }, children: terms.map(cell) };
   openOverlay({
     kind: "window",
     frame: "none",
-    key: `sl-win-${tabId}`,
+    // The zoomed window has its own key: reopening a key keeps its old spot, whatever `at` says.
+    key: `sl-win-${tabId}${o.big ? "-big" : ""}`,
     keep: true,
     width: o.big ? WIN.bigW : WIN.w,
     height: o.big ? WIN.bigH : WIN.h,
-    ...(o.at ? { at: o.at } : {}),
+    ...(at ? { at } : {}),
     layout: {
       type: "column",
       radius: 5,
@@ -763,6 +761,21 @@ function openTorn(tabId, o = {}) {
     },
   });
   return true;
+}
+
+/** The app window's size, from the desktop spacers' reports (sl.desk). */
+function appSize() {
+  const d = shared("sl.desk") ?? {};
+  const w = d["desk-top"]?.w;
+  if (!w) return null;
+  const h = MENUBAR + (d["desk-top"]?.h ?? 0) + (d["desk-left"]?.h ?? 0) + (d["desk-bottom"]?.h ?? 0) + (shown("dock") ? 92 : 0);
+  return { w, h };
+}
+
+/** A zoomed window's top left: centered in the app window. */
+function zoomedSpot() {
+  const a = appSize();
+  return a ? { x: Math.round((a.w * (1 - WIN.bigW)) / 2), y: Math.round((a.h * (1 - WIN.bigH)) / 2) } : null;
 }
 
 /** Moves a tab to its own window (at: its top left, else where it last was). */
@@ -777,7 +790,7 @@ export function tearOff(tabId, at = null) {
     if (next) run("tab.select", { id: next.id });
   }
   if (!openTorn(tabId, { at })) return;
-  setTorn({ ...torn(), [tabId]: { min: false, big: false } });
+  setTorn({ ...torn(), [tabId]: { min: false, big: false, at } });
   run("tab.settle", { id: tabId });
 }
 
@@ -797,6 +810,13 @@ export function mergeAll() {
   for (const id of Object.keys(torn())) putBack(id, null);
 }
 
+/** Records where a torn window is (its title bar's top left), after a drag. */
+export function placeTorn(tabId, at) {
+  const w = torn()[tabId];
+  if (!w || !at || (w.at && w.at.x === at.x && w.at.y === at.y)) return;
+  setTorn({ ...torn(), [tabId]: { ...w, at } });
+}
+
 /** Minimize: the window goes to the Dock; clicking it there brings it back. */
 export function minimizeTorn(tabId, overlay) {
   setTorn({ ...torn(), [tabId]: { ...torn()[tabId], min: true } });
@@ -809,11 +829,12 @@ export function restoreTorn(tabId) {
   setTorn({ ...torn(), [tabId]: { ...w, min: false } });
 }
 
-/** Zoom: a big window, or back to the standard size, in place. */
-export function zoomTorn(tabId) {
+/** Zoom: a big window centered in the app, or back to the standard size where it was. */
+export function zoomTorn(tabId, overlay = null) {
   const w = torn()[tabId];
   if (!w) return;
   setTorn({ ...torn(), [tabId]: { ...w, big: !w.big } });
+  if (overlay) closeOverlay(overlay);
   openTorn(tabId, { big: !w.big });
 }
 
@@ -822,13 +843,26 @@ export function raiseTorn(tabId) {
   const w = torn()[tabId];
   if (!w) return;
   if (w.min) return restoreTorn(tabId);
+  // Reopening it by key brings it to the front in place. Not pane.focus: that
+  // would select the tab in the main window and unsettle it.
   openTorn(tabId, { big: w.big });
-  const term = tabInfo(tabId)?.terminals[0];
-  if (term) run("pane.focus", { terminal: term });
 }
 
-/** A press on a tab: a drag overlay that tears the tab off once it's pulled down out of the strip. */
-export function startTear(tabId, e) {
+/** Where a torn-off window lands for a pointer at p, holding it `grab` px into
+ *  its title, kept inside the app window (size) when it's known. */
+export function tearSpot(p, grab = 120, size = null) {
+  let x = Math.round(p.x - grab);
+  let y = Math.round(p.y - WIN.title / 2);
+  if (size) {
+    x = Math.min(x, size.width - WIN.w - 4);
+    y = Math.min(y, size.height - WIN.h - 4);
+  }
+  return { x: Math.max(0, x), y: Math.max(MENUBAR, y) };
+}
+
+/** A press on a tab: a drag overlay where the tab follows the pointer, then a
+ *  ghost window once it's pulled out of the strip; the window opens on release. */
+export function startTear(tabId, e, name = "") {
   openOverlay({
     mod: "snowleopard",
     kind: "window",
@@ -836,7 +870,7 @@ export function startTear(tabId, e) {
     width: 1,
     height: 1,
     at: { x: 0, y: 0 },
-    props: { role: "drag", mode: "tear", tab: tabId, start: { x: e.position.x, y: e.position.y } },
+    props: { role: "drag", mode: "tear", tab: tabId, name, start: { x: e.position.x, y: e.position.y }, bounds: e.bounds ?? null },
   });
 }
 
