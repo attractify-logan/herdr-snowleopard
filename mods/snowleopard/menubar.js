@@ -141,8 +141,8 @@ export default class MenuBar {
           { label: "Close Tab", shortcut: sc("tab.close"), disabled: !tab, act: { sheet: ["closetab", { tab: tab?.id }] } },
           { label: "Close Space…", disabled: !s, act: { sheet: ["closespace", { space: s?.id }] } },
           { sep: true },
-          { label: "Rename Tab…", shortcut: sc("tab.rename"), disabled: !tab, act: { run: ["tab.rename", { id: tab?.id }] } },
-          { label: "Rename Space…", shortcut: sc("space.rename"), disabled: !s, act: { run: ["space.rename", { id: s?.id }] } },
+          { label: "Rename Tab…", shortcut: sc("tab.rename"), disabled: !tab, act: { sheet: ["rename", { what: "tab", id: tab?.id }] } },
+          { label: "Rename Space…", shortcut: sc("space.rename"), disabled: !s, act: { sheet: ["rename", { what: "space", id: s?.id }] } },
           ...(s && !s.machine && s.folder ? [{ sep: true }, { label: "Show in Finder", act: { open: s.folder } }] : []),
         ];
       }

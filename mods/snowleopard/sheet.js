@@ -5,11 +5,12 @@
 //   about       About Herdr: the icon, versions, More Info and Software Update
 //   forcequit   Force Quit Applications: every terminal; Force Quit asks first
 //   dockapps    the applications kept in the Dock: every installed app, checked or not
+//   rename      { what: "tab" | "space", id }: a name field; empty gives Herdr's name back
 // The default button is Aqua's pulsing blue gel; Return presses it, Escape
 // cancels.
 
 import { div, image } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
+import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { props, closeOverlay, run, spaces, agents, panes, updates, home } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, vgrad, aquaButton, programIcon, plural, base, dockApps, addDockApp, removeDockApp, listApps, makeAppIcons,
@@ -24,6 +25,17 @@ export default class Sheet {
     this.focus = cx.focus_handle();
     this.focus.focus();
     this.apps = null;
+    if (props()?.kind === "rename") {
+      const p = props();
+      const s = spaces().find((x) => (p.what === "space" ? x.id === p.id : x.tabs.some((t) => t.id === p.id)));
+      const t = s?.tabs.find((x) => x.id === p.id);
+      const named = p.what === "space" ? s?.named : t?.named;
+      this.input = InputState.new({ value: named ? (p.what === "space" ? s.name : t.name) : "", placeholder: p.what === "space" ? s?.name ?? "" : `Tab ${t?.name ?? ""}` });
+      this.input.on("submit", () => this.doRename());
+      this.input.focus();
+      // As Herdr's own picker does: the keyboard isn't always the field's on the first frame.
+      cx.timer.after(300, () => this.input.focus());
+    }
     this.icons = new Set();
     if (props()?.kind === "dockapps")
       cx.spawn(async (cx) => {
@@ -109,6 +121,7 @@ export default class Sheet {
     if (p.kind === "about") return this.about();
     if (p.kind === "forcequit") return this.forceQuit();
     if (p.kind === "dockapps") return this.dockApps();
+    if (p.kind === "rename") return this.rename(p);
     const a = this.alert(p) ?? { title: "Unknown sheet", detail: p.kind, yes: "OK", act: () => {} };
     const ok = () => {
       this.close();
@@ -169,6 +182,45 @@ export default class Sheet {
       )
       .child(div().pt(12).text_size(9).text_color(C.gray).child("Snow Leopard layout for Herdr"));
     return this.frame(body, ok);
+  }
+
+  doRename() {
+    const p = props() ?? {};
+    const name = this.input.value().trim();
+    this.close();
+    run(p.what === "space" ? "space.rename" : "tab.rename", { id: p.id, name });
+  }
+
+  rename(p) {
+    const w = 300;
+    const h = 24;
+    const body = h_flex()
+      .size_full()
+      .p(20)
+      .gap(16)
+      .items_start()
+      .child(image(ICON.herdr).flex_none().w(64).h(64))
+      .child(
+        v_flex()
+          .flex_1()
+          .min_w(0)
+          .gap(8)
+          .child(div().text_size(13).font_weight(700).child(p.what === "space" ? "Rename Space" : "Rename Tab"))
+          .child(
+            div()
+              .relative()
+              .w(w)
+              .h(h)
+              .child(paint(rrect(w, h, 3), "#8e8e8e", w, h))
+              .child(paint(rrect(w - 2, h - 2, 2, 1, 1), "#ffffff", w, h))
+              .child(paint(rrect(w - 2, 2, 0, 1, 1), "#00000014", w, h))
+              .child(h_flex().absolute().top(0).left(0).w(w).h(h).px(6).items_center().child(Input.new(this.input).flex_1().h(h).text_size(13).text_color("#000000"))),
+          )
+          .child(div().text_size(11).text_color(C.gray).child(p.what === "space" ? "Leave it empty to name the space after its folder again." : "Leave it empty to call the tab by its number again."))
+          .child(div().flex_1())
+          .child(h_flex().justify_end().gap(12).child(aquaButton("rn-cancel", "Cancel", () => this.close())).child(aquaButton("rn-ok", "Rename", () => this.doRename(), { primary: true }))),
+      );
+    return this.frame(body, () => this.doRename());
   }
 
   dockApps() {

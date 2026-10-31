@@ -78,7 +78,9 @@ herdr-app do layout.switch --name snowleopard
   "ctrl-f2": "snowleopard.menus",
   "cmd-alt-escape": "snowleopard.forcequit",
   "cmd-m": "window.minimize",
-  "ctrl-cmd-f": "snowleopard.fullscreen"
+  "ctrl-cmd-f": "snowleopard.fullscreen",
+  "f2": "snowleopard.renametab",
+  "shift-f2": "snowleopard.renamespace"
 }
 ```
 

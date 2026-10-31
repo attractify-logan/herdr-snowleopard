@@ -48,6 +48,15 @@ const COMMANDS = {
   mergeall: () => mergeAll(),
   notes: () => openWin("notes"),
   slack: () => openWin("slack"),
+  // F2 and ⇧F2 in this layout: the Aqua rename sheet instead of Herdr's prompt.
+  renametab: () => {
+    const t = spaces().find((s) => s.active)?.tabs.find((t) => t.active);
+    if (t) openSheet("rename", { what: "tab", id: t.id });
+  },
+  renamespace: () => {
+    const s = spaces().find((s) => s.active);
+    if (s) openSheet("rename", { what: "space", id: s.id });
+  },
 };
 
 export default class SnowLeopard extends View {

@@ -537,7 +537,7 @@ export function closeMenus() {
   setShared("sl.menu", null);
 }
 
-const SHEET = { about: [300, 340], forcequit: [440, 400], dockapps: [400, 480] };
+const SHEET = { about: [300, 340], forcequit: [440, 400], dockapps: [400, 480], rename: [420, 170] };
 
 /** Opens a sheet (the sheet role): kind and its props. */
 export function openSheet(kind, p = {}) {
@@ -597,7 +597,7 @@ export function spaceItems(s) {
     { sep: true },
     { label: "Open", disabled: s.active, act: { run: ["space.select", { id: s.id }] } },
     { label: "New Tab Here", act: { run: ["tab.new", { space: s.id }] } },
-    { label: "Rename…", shortcut: s.active ? shortcut("space.rename") : "", act: { run: ["space.rename", { id: s.id }] } },
+    { label: "Rename…", shortcut: s.active ? shortcut("space.rename") : "", act: { sheet: ["rename", { what: "space", id: s.id }] } },
     ...(!s.machine && s.folder ? [{ label: "Show in Finder", act: { open: s.folder } }] : []),
     { sep: true },
     { label: "Close Space…", act: { sheet: ["closespace", { space: s.id }] } },

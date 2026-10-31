@@ -19,7 +19,7 @@ export default class Tabs {
     closeMenus();
     const sc = shortcut;
     const items = [
-      { label: "Rename Tab…", shortcut: t.active ? sc("tab.rename") : "", act: { run: ["tab.rename", { id: t.id }] } },
+      { label: "Rename Tab…", shortcut: t.active ? sc("tab.rename") : "", act: { sheet: ["rename", { what: "tab", id: t.id }] } },
       { label: "Move Tab Left", disabled: t.index <= 1, act: { run: ["tab.move", { id: t.id, index: t.index - 1 }] } },
       { label: "Move Tab Right", disabled: t.index >= s.tabs.length, act: { run: ["tab.move", { id: t.id, index: t.index + 1 }] } },
       { sep: true },

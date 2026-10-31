@@ -74,8 +74,8 @@ export default class TitleBar {
     const tab = s?.tabs.find((t) => t.active);
     const pane = focused()?.pane;
     return [
-      { label: "Rename Tab…", shortcut: sc("tab.rename"), disabled: !tab, act: { run: ["tab.rename", { id: tab?.id }] } },
-      { label: "Rename Space…", shortcut: sc("space.rename"), disabled: !s, act: { run: ["space.rename", { id: s?.id }] } },
+      { label: "Rename Tab…", shortcut: sc("tab.rename"), disabled: !tab, act: { sheet: ["rename", { what: "tab", id: tab?.id }] } },
+      { label: "Rename Space…", shortcut: sc("space.rename"), disabled: !s, act: { sheet: ["rename", { what: "space", id: s?.id }] } },
       { sep: true },
       { label: "Split Pane Right", shortcut: sc("pane.split:right"), disabled: !pane, act: { run: ["pane.split", { direction: "right" }] } },
       { label: "Split Pane Down", shortcut: sc("pane.split:down"), disabled: !pane, act: { run: ["pane.split", { direction: "down" }] } },

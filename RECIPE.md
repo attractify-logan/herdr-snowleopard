@@ -210,7 +210,8 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   folder, Terminal and Trash; one-color glyphs tinted with `svg()`).
 - Optional keys (`keys.json`, section `layout:snowleopard`):
   `"ctrl-f2": "snowleopard.menus"`, `"cmd-alt-escape": "snowleopard.forcequit"`,
-  `"cmd-m": "window.minimize"`, `"ctrl-cmd-f": "snowleopard.fullscreen"`. Mod commands: `snowleopard.apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes|slack`.
+  `"cmd-m": "window.minimize"`, `"ctrl-cmd-f": "snowleopard.fullscreen"`,
+  `"f2": "snowleopard.renametab"`, `"shift-f2": "snowleopard.renamespace"`. Mod commands: `snowleopard.apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes|slack|renametab|renamespace`.
 
 ## Watch out
 
@@ -246,6 +247,10 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   cheap: the notes window converts a note once when it loads, indexes the
   vault once, compares names with plain lowercase `<`, and draws its source
   list with `v_virtual_list` (only the visible rows).
+- Herdr's own prompt dialog (rename) draws its field in the theme's
+  `background`, the terminal's: black on black with the Pro profile. Every
+  rename here opens the Aqua `rename` sheet instead, and the layout's keys send
+  F2 and ⇧F2 to it.
 - Herdr can't resize or zoom an overlay window in place, so the app windows
   reopen, and a reopened window is a fresh copy of the mod. Their data lives on
   `globalThis` (module-level state didn't survive), so a new copy shows the
