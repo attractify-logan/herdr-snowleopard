@@ -38,7 +38,7 @@ Top to bottom:
     window isn't key). A bottom bar holds + (new space) and the gear ▾.
   - **Tab bar** (24 px): a recessed `#a3a3a3` → `#b4b4b4` strip with equal-width
     tabs; the shown tab is lifted to `#cbcbcb` → `#bdbdbd`. Each tab has its
-    agent mark (a close bead on hover), its centered name, and its ⌘ number.
+    agent mark (a flat gray close button on hover), its centered name, and its ⌘ number.
     A + button sits at the end.
   - **Panes**: 1 px `#8b8b8b` gaps. When a tab is split, each pane gets a 19 px
     title strip (small close and zoom beads, "program — folder (branch)",

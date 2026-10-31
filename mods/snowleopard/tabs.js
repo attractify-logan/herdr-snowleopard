@@ -6,11 +6,12 @@
 import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, run } from "herdr";
-import { C, FONT, GLYPH, key, fillGrad, embossed, statusMark, openMenu, closeMenus, shortcut, bead } from "./kit.js";
+import { C, FONT, GLYPH, key, fillGrad, embossed, statusMark, openMenu, closeMenus, shortcut, tabClose } from "./kit.js";
 
 export default class Tabs {
   init() {
     this.hover = null;
+    this.hotClose = false;
   }
 
   menu(s, t, e) {
@@ -59,7 +60,11 @@ export default class Tabs {
               el.child(
                 div()
                   .id(`tx-${t.id}`)
-                  .child(bead("graphite", 13, GLYPH.close))
+                  .child(tabClose(13, this.hotClose))
+                  .on_hover((h, cx) => {
+                    this.hotClose = h;
+                    cx.notify();
+                  })
                   .tooltip("Close Tab")
                   .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
                   .on_click(() => run("tab.close", { id: t.id })),

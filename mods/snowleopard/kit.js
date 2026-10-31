@@ -172,12 +172,11 @@ const BEAD = {
   off: { rim: "#8a8a8a", top: "#a7a7a7", bottom: "#ededed", glyph: "#4a4a4a" },
   blue: { rim: "#1e4fa8", top: "#2a64d8", bottom: "#a9d0ff", glyph: "#ffffff" },
   red: { rim: "#a01a10", top: "#d22a1c", bottom: "#ff8a74", glyph: "#ffffff" },
-  graphite: { rim: "#5a6573", top: "#6d7a8b", bottom: "#d6dee8", glyph: "#ffffff" },
 };
 
 /**
  * A glass bead: rim, a lit-from-below body and a specular cap. kind: close,
- * min, zoom, off, blue, red, graphite. glyph: an svg path drawn in the bead's
+ * min, zoom, off, blue, red. glyph: an svg path drawn in the bead's
  * glyph color (the traffic lights show theirs on hover).
  */
 export function bead(kind, size, glyph = null) {
@@ -206,6 +205,32 @@ export function bead(kind, size, glyph = null) {
         .child(svg(glyph).w(s * 0.5).h(s * 0.5).text_color(c.glyph)),
     );
   return el;
+}
+
+/**
+ * Safari 4 and Terminal's tab close button: a flat gray disc with a white
+ * ×, darker under the pointer and when pressed. No gloss.
+ */
+export function tabClose(size, hot = false) {
+  const s = size;
+  return div()
+    .relative()
+    .flex_none()
+    .w(s)
+    .h(s)
+    .child(paint(oval(s, s, 0, 1), "#ffffff66", s, s + 1))
+    .child(paint(oval(s, s), hot ? "#555555" : "#888888", s, s))
+    .child(
+      div()
+        .absolute()
+        .top(0)
+        .left(0)
+        .size_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(svg(GLYPH.close).w(s * 0.56).h(s * 0.56).text_color("#ffffff")),
+    );
 }
 
 /** Aqua's red count badge (the Dock's, Mail's): white rim, glossy red, bold white digits. */
