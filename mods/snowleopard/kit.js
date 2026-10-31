@@ -128,7 +128,26 @@ export function embossed(text, o = {}) {
 // ---- paths and gradients
 
 /** A rounded rectangle path in px; r is a number or [tl, tr, br, bl]. */
+// Built paths and gradients are immutable native values, and building one is
+// many calls into the host: every part redraws its chrome often, so they're
+// kept by their arguments. (Redraws share a time budget; see RECIPE.md.)
+const PATHS = new Map();
+const GRADS = new Map();
+function cached(map, key, make) {
+  let v = map.get(key);
+  if (v === undefined) {
+    if (map.size > 4000) map.clear();
+    v = make();
+    map.set(key, v);
+  }
+  return v;
+}
+
 export function rrect(w, h, r = 0, x = 0, y = 0) {
+  return cached(PATHS, `r${w},${h},${r},${x},${y}`, () => buildRrect(w, h, r, x, y));
+}
+
+function buildRrect(w, h, r, x, y) {
   const [tl, tr, br, bl] = (Array.isArray(r) ? r : [r, r, r, r]).map((n) => Math.max(0, Math.min(n, w / 2, h / 2)));
   let b = PathBuilder.fill().move_to(x + tl, y).line_to(x + w - tr, y);
   if (tr) b = b.arc_to(tr, tr, 0, false, true, x + w, y + tr);
@@ -143,6 +162,10 @@ export function rrect(w, h, r = 0, x = 0, y = 0) {
 
 /** An ellipse path in px. */
 export function oval(w, h, x = 0, y = 0) {
+  return cached(PATHS, `o${w},${h},${x},${y}`, () => buildOval(w, h, x, y));
+}
+
+function buildOval(w, h, x, y) {
   const rx = w / 2;
   const ry = h / 2;
   return PathBuilder.fill()
@@ -155,7 +178,7 @@ export function oval(w, h, x = 0, y = 0) {
 
 /** A vertical gradient, top to bottom. */
 export function vgrad(top, bottom) {
-  return Background.linear_gradient(180, top, bottom);
+  return cached(GRADS, `${top},${bottom}`, () => Background.linear_gradient(180, top, bottom));
 }
 
 /** Paints a path (in px, from the parent's top left) over a relative parent. */
@@ -163,7 +186,9 @@ export function paint(path, bg, w, h) {
   return window.paint_path(path, bg).absolute().top(0).left(0).w(w).h(h);
 }
 
-const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
+let RECT_PATH = null;
+const RECT = () => (RECT_PATH ??= buildRect());
+const buildRect = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 
 /** A layer that fills its relative parent with a top-to-bottom gradient. */
 export function fillGrad(top, bottom) {
@@ -480,11 +505,24 @@ function pretty(chord) {
 }
 
 /** The shortcut bound to an action (global, this layout's or the terminal's), e.g. "⇧⌘D", or "". */
+// Every action's printed chord, rebuilt at most every 3 s: keys() hands over
+// every binding on each call, and menus, tabs and the toolbar ask often.
+let CHORDS = null;
+let CHORDS_AT = 0;
+
 export function shortcut(action) {
-  const list = keys() ?? [];
-  const ok = (s) => s === "global" || s === "layout:snowleopard" || s === "terminal";
-  const hit = list.find((k) => ok(k.section) && k.action === action && !String(k.keys).includes(" "));
-  return hit ? pretty(String(hit.keys)) : "";
+  const now = Date.now();
+  if (!CHORDS || now - CHORDS_AT > 3000) {
+    CHORDS = new Map();
+    CHORDS_AT = now;
+    const ok = (s) => s === "global" || s === "layout:snowleopard" || s === "terminal";
+    // The layout's own binding wins over a global one for the same action.
+    for (const k of keys() ?? []) {
+      if (!ok(k.section) || String(k.keys).includes(" ")) continue;
+      if (!CHORDS.has(k.action) || k.section === "layout:snowleopard") CHORDS.set(k.action, pretty(String(k.keys)));
+    }
+  }
+  return CHORDS.get(action) ?? "";
 }
 
 // ---- menus and sheets

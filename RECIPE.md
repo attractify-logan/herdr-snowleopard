@@ -257,6 +257,14 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   same note or conversation at once instead of reloading.
 - Overlay windows always sit above the layout, so the main Aqua window can't
   be brought in front of one; minimize the window to get it out of the way.
+- Every part redraws its Aqua chrome often, and building a path or a gradient
+  is many calls into the host, so `rrect`, `oval` and `vgrad` keep what they
+  built by their arguments, and `shortcut()` rebuilds its table from `keys()`
+  at most every 3 s. A full redraw of every part measured about 200 ms before
+  this, the size of Herdr's budget, which is when a part shows "could not be
+  re-rendered (interrupted)".
+- Timing a part from inside it (Date.now around render) is noisy here, and a
+  bad probe breaks every part at once: keep probes trivially safe.
 - A shared write redraws every part of the layout at once, so the notes window
   remembers the last note read only when it closes.
 - `.when(cond, ...)` needs a real boolean: `undefined` reaches the native side
