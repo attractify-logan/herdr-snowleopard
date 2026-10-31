@@ -1,8 +1,10 @@
 // Moving and resizing the window on the desktop. A press on the title bar
 // (move) or the status bar's grip (resize) opens this as a clear overlay
 // over the whole app window, so it gets every pointer move until the button
-// comes up, wherever the pointer goes. Each move resizes the desktop's
-// spacers (desk-left, desk-top) or the window itself (window, desk-row).
+// comes up, wherever the pointer goes. A move only notes where the window
+// should be; once a frame (16 ms) the latest spot is applied, resizing just
+// the spacers (desk-left, desk-top) or sizes (window, desk-row) that changed.
+// Every resize is a layout pass, so pointer events never queue up behind them.
 // props { mode: "move" | "resize", start: {x, y}, frame }, or { mode: "tear",
 // tab, name, start, bounds }: a tab pressed in the tab bar. As in Terminal,
 // a ghost of the tab follows the pointer; pulled 28 px out of the strip it
@@ -11,15 +13,25 @@
 
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { props, closeOverlay } from "herdr";
-import { shared } from "herdr";
-import { C, FONT, ICON, applyFrame, setSavedFrame, desktopLimits, tearOff, tearSpot, paint, rrect, vgrad, embossed, WIN, MIN_W, MIN_H } from "./kit.js";
+import { props, closeOverlay, shared, setShared } from "herdr";
+import { C, FONT, ICON, placeFrame, setSavedFrame, desktopLimits, tearOff, tearSpot, paint, rrect, vgrad, embossed, WIN, MIN_W, MIN_H } from "./kit.js";
 
 export default class Drag {
-  init() {
+  init(_p, cx) {
     this.size = null;
     this.frame = null;
-    this.last = null;
+    this.want = null; // where the pointer says the window goes
+    this.shown = undefined; // the frame the layout has now (null: still zoomed)
+    if (props()?.mode !== "tear") cx.timer.every(16, () => this.flush());
+  }
+
+  /** Applies the latest wanted frame, if it moved since the last one. */
+  flush() {
+    const f = this.want;
+    const s = this.shown;
+    if (!f || (s && s.x === f.x && s.y === f.y && s.w === f.w && s.h === f.h)) return;
+    placeFrame(s, f);
+    this.shown = f;
   }
 
   move(e, cx) {
@@ -32,7 +44,11 @@ export default class Drag {
     }
     if (!this.size) return;
     const lim = desktopLimits(this.size);
-    this.frame ??= this.startFrame(p, lim);
+    if (!this.frame) {
+      this.frame = this.startFrame(p, lim);
+      // A placed window is already laid out at its frame; a zoomed one isn't.
+      this.shown = p.frame.h !== null && p.frame.h !== undefined ? this.frame : null;
+    }
     const f = this.frame;
     const dx = Math.round(e.position.x - p.start.x);
     const dy = Math.round(e.position.y - p.start.y);
@@ -41,11 +57,7 @@ export default class Drag {
       p.mode === "resize"
         ? { x: f.x, y: f.y, w: clamp(f.w + dx, MIN_W, lim.w - f.x), h: clamp(f.h + dy, MIN_H, lim.h - f.y) }
         : { x: clamp(f.x + dx, 0, Math.max(0, lim.w - f.w)), y: clamp(f.y + dy, 0, Math.max(0, lim.h - f.h)), w: f.w, h: f.h };
-    const key = `${next.x},${next.y},${next.w},${next.h}`;
-    if (key === this.last) return;
-    this.last = key;
-    this.now = next;
-    applyFrame(next);
+    this.want = next;
   }
 
   // Dragging a zoomed window by its title un-zooms it to its last size (or
@@ -68,8 +80,17 @@ export default class Drag {
       this.done = true;
       tearOff(p.tab, tearSpot(this.pos, this.grab(), this.size));
     }
-    if (this.now) setSavedFrame(this.now);
+    if (this.want) {
+      this.flush();
+      setShared("sl.placed", this.want);
+      setSavedFrame(this.want);
+    }
     closeOverlay(props()?.overlay);
+  }
+
+  // However the overlay goes, the desk spacers may report again.
+  async close() {
+    if (props()?.mode !== "tear") setShared("sl.dragging", false);
   }
 
   // How far into the ghost window's title the pointer holds it: where it held the tab, scaled.

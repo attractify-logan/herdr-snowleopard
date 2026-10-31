@@ -636,10 +636,16 @@ export function currentFrame(width) {
 /** Places the window: spacers and its own size in px, the far spacers take the rest. */
 export function applyFrame(f) {
   setShared("sl.placed", f);
-  run("layout.resize", { id: "desk-left", px: f.x });
-  run("layout.resize", { id: "desk-top", px: f.y });
-  run("layout.resize", { id: "window", px: f.w });
-  run("layout.resize", { id: "desk-row", px: f.h });
+  placeFrame(null, f);
+}
+
+/** Moves the window from frame `from` to `to` with as few layout changes as it
+ *  takes: each one is a layout pass, so a move along one axis is one resize.
+ *  From a zoomed window (no `from`) it sets them all. Touches no shared state. */
+export function placeFrame(from, to) {
+  const px = [["desk-left", "x"], ["desk-top", "y"], ["window", "w"], ["desk-row", "h"]];
+  for (const [id, k] of px) if (!from || from[k] !== to[k]) run("layout.resize", { id, px: to[k] });
+  if (from) return;
   run("layout.resize", { id: "desk-right", weight: 1 });
   run("layout.resize", { id: "desk-bottom", weight: 1 });
 }
@@ -687,6 +693,8 @@ export function toggleZoom(width = shared("sl.desk")?.window?.w) {
 
 /** Starts moving ("move") or resizing ("resize") the window from a press. */
 export function startDrag(mode, e, width) {
+  // The desk spacers hold their size reports until it's over (see desk.js).
+  setShared("sl.dragging", true);
   openOverlay({
     mod: "snowleopard",
     kind: "window",

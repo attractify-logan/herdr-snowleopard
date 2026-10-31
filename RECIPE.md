@@ -135,7 +135,7 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   closespace, about, forcequit), `desk`, `aqua` (a torn-off window's title
   bar), and `drag` (a full-window
   `kind: "window"` overlay opened on a title or grip press that receives
-  every pointer move and resizes the spacers until mouse up, or tears a
+  every pointer move and, once a frame, resizes the spacers that changed until mouse up, or tears a
   pressed tab off once it's pulled 28 px out of the strip). A torn-off tab is
   an overlay window (`kind: "window"`, `frame: "none"`, `key: "sl-win-<tab>"`,
   `keep: true`; `sl-win-<tab>-big` when zoomed) holding a layout: the `aqua`
@@ -198,6 +198,15 @@ Ocean and Novel, using Terminal.app's ANSI palette.
 - While Herdr starts or quits, `spaces()` is briefly empty. A kept window that
   closed itself then would drop out of `windows.json`'s kept list, so a torn
   window closes itself only when its tab is put back.
+- Every `layout.resize` is a layout pass and every `setShared` redraws every
+  part of the layout. Applying a drag on each pointer event (six resizes,
+  plus the spacers reporting their sizes) let events queue up on a busy
+  window. The drag overlay only notes the wanted frame on each move; a 16 ms
+  `cx.timer` applies the latest one, resizing only the nodes that changed
+  (one per axis), and `sl.placed` is written once at the end. While
+  `sl.dragging` is set, the desk spacers and title bar hold their size
+  reports and send them when it clears (the overlay's `close()` clears it,
+  however the drag ends).
 - An element's `on_mouse_move` only fires while the pointer is over it, so
   dragging uses the full-window `drag` overlay; the title bar alone would
   lose the pointer on a fast move.

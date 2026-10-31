@@ -7,7 +7,7 @@
 
 import { div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, focused, panes, run, knownAgents, window as appWindow } from "herdr";
+import { spaces, focused, panes, run, knownAgents, shared, window as appWindow } from "herdr";
 import {
   C, GLYPH, ICON, key, paint, rrect, vgrad, embossed, bead, textured, openMenu, closeMenus, shortcut, shown,
   startDrag, toggleZoom, reportSize,
@@ -95,6 +95,8 @@ export default class TitleBar {
   }
 
   render(_cx) {
+    // A resize drag holds the window's size report until it's over (see desk.js).
+    if (this.size && !shared("sl.dragging")) reportSize("window", this.size);
     const w = this.size?.width ?? 0;
     const h = this.size?.height ?? 58;
     const live = key();
@@ -136,7 +138,7 @@ export default class TitleBar {
       .id("root")
       .on_size_change((size, cx) => {
         this.size = size;
-        reportSize("window", size);
+        if (!shared("sl.dragging")) reportSize("window", size);
         cx.notify();
       })
       // Drag the title bar (or the toolbar's bare parts) to move the window; double-click zooms it.
