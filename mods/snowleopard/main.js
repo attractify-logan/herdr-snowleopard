@@ -12,6 +12,7 @@
 //   desk      bare desktop around the window (the desk-* spacers)
 //   drag      moves or resizes the window while the button is down (an overlay)
 //   aqua      a torn-off tab's window title bar (in an overlay window)
+//   notes     the Obsidian vault in an Aqua window (an overlay window)
 
 import { View, div } from "gpui-kit";
 import { props, nextCommand } from "herdr";
@@ -27,10 +28,11 @@ import Sheet from "./sheet.js";
 import Desk from "./desk.js";
 import Drag from "./drag.js";
 import AquaWindow from "./aqua.js";
+import Notes from "./notes.js";
 import { spaces } from "herdr";
-import { openSheet, tearOff, mergeAll, torn } from "./kit.js";
+import { openSheet, tearOff, mergeAll, torn, openNotes } from "./kit.js";
 
-const ROLES = { menubar: MenuBar, titlebar: TitleBar, sidebar: Sidebar, tabs: Tabs, pane: PaneHeader, status: StatusBar, dock: Dock, menu: Menu, sheet: Sheet, desk: Desk, drag: Drag, aqua: AquaWindow };
+const ROLES = { menubar: MenuBar, titlebar: TitleBar, sidebar: Sidebar, tabs: Tabs, pane: PaneHeader, status: StatusBar, dock: Dock, menu: Menu, sheet: Sheet, desk: Desk, drag: Drag, aqua: AquaWindow, notes: Notes };
 
 // Key commands ("snowleopard.<command>" in keys.json), taken by the menu bar's copy.
 const COMMANDS = {
@@ -42,6 +44,7 @@ const COMMANDS = {
     if (t) tearOff(t.id);
   },
   mergeall: () => mergeAll(),
+  notes: () => openNotes(),
 };
 
 export default class SnowLeopard extends View {

@@ -111,6 +111,22 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   and Close Space…. Click a heading to fold it.
 - **Tabs**: click to select, double-click the strip for a new tab, right-click
   for rename, move left/right and close.
+- **Notes**: Obsidian's Dock icon opens the vault (Obsidian's open vault in
+  `~/Library/Application Support/obsidian/obsidian.json`) in an Aqua window
+  (860×560): a unified title bar and toolbar (◀ ▶ history, Edit/Done, an
+  Obsidian button that opens the note in the app, a search field), a 210 px
+  source list of folders (disclosure triangles) and notes (a Leopard document
+  icon; the open one selected in blue), the note as Markdown on white, and a
+  15 px bottom bar with the note count and a resize grip. Front matter is
+  hidden; `[[Note]]`, `[[Note|alias]]`, `[[Note#heading]]` and `![[embed]]`
+  become links that open the note in place (or an attachment in its app);
+  inside code they stay as written. Search matches note names, and their text
+  from two letters (`grep -rliF`). Edit (⌘E) swaps in a Markdown editor; ⌘S or
+  Done saves with `writeTextFile(path, text, expected)`, so a note changed on
+  disk meanwhile isn't overwritten. ⌘[ and ⌘] go back and forward. Red closes
+  it, yellow minimizes it beside the Trash, green zooms it. It opens on the
+  note read last, else the one changed last. Its Dock menu: Open Vault in
+  Herdr, Open Obsidian App.
 - **Dock applications**: View › Dock Applications… (or right-click Herdr in
   the Dock) lists every app in /Applications, /System/Applications, their
   Utilities and ~/Applications with its icon and an Aqua checkbox; checked
@@ -152,7 +168,11 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   `keep: true`; `sl-win-<tab>-big` when zoomed) holding a layout: the `aqua`
   title bar block over its terminals' `{terminal}` blocks; the tab is
   `tab.settle`d while it's out and `tab.unsettle`d when it comes back. Shared
-  `sl.windows` tracks them (`min`, `big`, `at`, `w`, `h`). The window's
+  `sl.windows` tracks them (`min`, `big`, `at`, `w`, `h`). The notes window
+  is the `notes` role in an overlay window (`key: "sl-notes"`, or
+  `"sl-notes-big"` zoomed, `keep: true`; props `vault` and `start` can pick
+  another folder and note); shared `sl.notes` holds `open`, `min`, `big`,
+  `at`, `w`, `h` and `last`. The window's
   layout is the `aqua` title bar, the terminals, and an `aqua` bottom bar
   (`part: "bar"`, 15 px) with the grip; the grip opens the `drag` overlay in
   `tornresize` mode and the window is reopened by its key at the new size.
@@ -179,7 +199,7 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   folder, Terminal and Trash; one-color glyphs tinted with `svg()`).
 - Optional keys (`keys.json`, section `layout:snowleopard`):
   `"ctrl-f2": "snowleopard.menus"`, `"cmd-alt-escape": "snowleopard.forcequit"`,
-  `"cmd-m": "window.minimize"`, `"ctrl-cmd-f": "snowleopard.fullscreen"`. Mod commands: `snowleopard.apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall`.
+  `"cmd-m": "window.minimize"`, `"ctrl-cmd-f": "snowleopard.fullscreen"`. Mod commands: `snowleopard.apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes`.
 
 ## Watch out
 
@@ -207,6 +227,20 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   while dragging; reopening on every frame would be too heavy.
 - Apps that ship no .icns (only an asset catalog) get a plain tile with their
   initial. `qlmanage -t` hangs from a mod's `exec`, so it isn't used.
+- Render time is budgeted (about 200 ms per redraw) and string work is far
+  slower in Herdr's JavaScript than in Node: `localeCompare` with options, a
+  per-character `startsWith` scan, or a backtracking regex over a 10 KB note
+  each ran a redraw out of time. An interrupted script can leave every part of
+  the mod failing to redraw ("Null") until Herdr restarts, so keep redraws
+  cheap: the notes window converts a note once when it loads, indexes the
+  vault once, compares names with plain lowercase `<`, and draws its source
+  list with `v_virtual_list` (only the visible rows).
+- A shared write redraws every part of the layout at once, so the notes window
+  remembers the last note read only when it closes.
+- `.when(cond, ...)` needs a real boolean: `undefined` reaches the native side
+  as an error that has no stack trace.
+- `fs/promises` writes are refused outside a manifest's write roots; Herdr's
+  `writeTextFile` works.
 - Herdr's `focused()` reports layout terminal blocks but not terminal blocks
   inside overlay windows, so a mod can't tell which Aqua window has the
   keyboard. Every window looks key while Herdr is in front, rather than the

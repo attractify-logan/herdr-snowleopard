@@ -17,7 +17,7 @@
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { props, closeOverlay, shared, setShared } from "herdr";
-import { C, FONT, ICON, placeFrame, setSavedFrame, desktopLimits, tearOff, tearSpot, resizeTorn, paint, rrect, vgrad, embossed, WIN, MIN_W, MIN_H } from "./kit.js";
+import { C, FONT, ICON, placeFrame, setSavedFrame, desktopLimits, tearOff, tearSpot, resizeTorn, resizeNotes, paint, rrect, vgrad, embossed, WIN, MIN_W, MIN_H } from "./kit.js";
 
 export default class Drag {
   init(_p, cx) {
@@ -98,7 +98,8 @@ export default class Drag {
     const p = props() ?? {};
     if (p.mode === "tornresize" && this.pos && !this.done) {
       this.done = true;
-      resizeTorn(p.tab, this.tornFrame());
+      if (p.target === "notes") resizeNotes(this.tornFrame());
+      else resizeTorn(p.tab, this.tornFrame());
     }
     if (p.mode === "tear" && this.out && this.pos && !this.done) {
       this.done = true;

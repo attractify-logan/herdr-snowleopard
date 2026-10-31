@@ -9,13 +9,15 @@
 // Applications kept in the Dock ("sl.dockApps", View › Dock Applications…)
 // sit beside Herdr: click opens one, right-click opens the shown space's
 // folder in it (Obsidian as a vault), and a light shows the running ones.
+// Obsidian's icon opens the vault in Herdr's own notes window (notes.js);
+// its menu still opens the app. A minimized notes window waits by the Trash.
 
 import { div, image, PathBuilder } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, agents, run, shared, exec } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, oval, vgrad, programIcon, leadProgram, countBadge, openMenu, closeMenus, menuSize,
-  spaceItems, shortcut, torn, tabInfo, restoreTorn, dockApps, appIcon,
+  spaceItems, shortcut, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, openNotes, notesState,
 } from "./kit.js";
 
 const ICON_SIZE = 48;
@@ -62,8 +64,9 @@ export default class Dock {
   appItems(it) {
     const s = spaces().find((x) => x.active);
     const here = s && !s.machine && s.folder;
+    const notes = appName(it.app.path) === "Obsidian";
     return [
-      { label: "Open", act: { launch: [it.app.path] } },
+      ...(notes ? [{ label: "Open Vault in Herdr", act: { notes: true } }, { label: "Open Obsidian App", act: { launch: [it.app.path] } }] : [{ label: "Open", act: { launch: [it.app.path] } }]),
       ...(here ? [{ label: `Open “${s.name}” in ${it.label}`, act: { launch: [it.app.path, s.folder] } }] : []),
       { sep: true },
       { label: "Show in Finder", act: { reveal: it.app.path } },
@@ -97,6 +100,10 @@ export default class Dock {
       if (!info) continue;
       list.push({ kind: "win", id: `win-${id}`, tab: id, label: `${info.space.name} — ${info.tab.named ? info.tab.name : `Tab ${info.tab.name}`}`, program: leadProgram(info.space.id, id) });
     }
+    if (notesState().min && dockApps().some((a) => appName(a.path) === "Obsidian")) {
+      const ob = dockApps().find((a) => appName(a.path) === "Obsidian");
+      list.push({ kind: "notesmin", id: "notesmin", label: notesState().last ? notesState().last.split("/").pop().replace(/\.md$/i, "") : "Notes", app: ob });
+    }
     list.push({ kind: "trash", id: "trash", label: "Trash" });
     return list;
   }
@@ -122,6 +129,7 @@ export default class Dock {
     if (it.kind === "app") return image(ICON.herdr).w(s).h(s);
     if (it.kind === "trash") return image(ICON.trash).w(s).h(s);
     if (it.kind === "win") return miniWindow(s, it.program);
+    if (it.kind === "notesmin") return miniWindow(s, null, it.app.icon ? appIcon(it.app.path) : null);
     if (it.kind === "dapp") return it.app.icon ? image(appIcon(it.app.path)).w(s).h(s) : plainApp(s, it.label);
     const sp = it.space;
     const agent = it.program && !it.program.shell && it.program.key !== "shell";
@@ -212,7 +220,11 @@ export default class Dock {
     if (it.kind === "app") return run("mod.open", { name: "picker" });
     if (it.kind === "space") run("space.select", { id: it.space.id });
     if (it.kind === "win") restoreTorn(it.tab);
-    if (it.kind === "dapp") exec("open", ["-a", it.app.path]).catch(() => {});
+    if (it.kind === "dapp") {
+      if (appName(it.app.path) === "Obsidian") openNotes();
+      else exec("open", ["-a", it.app.path]).catch(() => {});
+    }
+    if (it.kind === "notesmin") openNotes();
   }
 
   light(x, bright) {
@@ -257,7 +269,8 @@ export default class Dock {
         continue;
       }
       if (it.kind === "app") kids.push(this.light(x, false));
-      if (it.kind === "dapp" && this.running.has(it.app.path)) kids.push(this.light(x, false));
+      const notesOpen = appName(it.app?.path ?? "") === "Obsidian" && notesState().open;
+      if (it.kind === "dapp" && (this.running.has(it.app.path) || notesOpen)) kids.push(this.light(x, false));
       if (it.kind === "space" && (it.running || it.space.active)) kids.push(this.light(x, it.space.active));
       kids.push(this.icon(it, x).top(top - ICON_SIZE + 9));
       x += ICON_SIZE + GAP;
@@ -287,7 +300,7 @@ function plainApp(s, name) {
 }
 
 /** A minimized window in the Dock: a tiny Aqua window, its program's icon badged on it. */
-function miniWindow(s, program) {
+function miniWindow(s, program, badge = null) {
   const w = s;
   const h = s * 0.74;
   const y = (s - h) / 2;
@@ -301,7 +314,8 @@ function miniWindow(s, program) {
     .child(paint(rrect(w - 2, h - 11, [0, 0, 2, 2], 1, y + 10), "#141414", s, s))
     .children(["#ff6a5c", "#ffc130", "#5fcf3f"].map((c, i) => div().absolute().top(y + 3).left(4 + i * 5).w(3).h(3).rounded_full().bg(c)))
     .child(div().absolute().top(y + 13).left(4).text_size(6).font_family("Menlo").text_color("#c8c8c8").child("$ _"))
-    .when(agent, (el) => el.child(div().absolute().bottom(-1).right(-3).child(programIcon(program, s * 0.42, { small: true }))));
+    .when(agent, (el) => el.child(div().absolute().bottom(-1).right(-3).child(programIcon(program, s * 0.42, { small: true }))))
+    .when(Boolean(badge), (el) => el.child(image(badge).absolute().bottom(-1).right(-3).w(s * 0.42).h(s * 0.42)));
 }
 
 /** The shelf's top surface: narrower at the back, full width at the front. */

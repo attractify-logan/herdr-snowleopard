@@ -1,9 +1,12 @@
 # Snow Leopard for Herdr
 
 Mac OS X 10.6 for the [Herdr](https://herdr.dev) app. It has the menu bar over
-the Aurora wallpaper, one Aqua window with a unified toolbar, Finder's source
-list, Terminal.app tabs and split panes, and Leopard's glass Dock. Every menu,
-button and Dock icon runs a real Herdr command.
+the Aurora wallpaper, Aqua windows with unified toolbars, Finder's source list,
+Terminal.app tabs and split panes, and Leopard's glass Dock. Every menu, button
+and Dock icon runs a real Herdr command.
+
+> **Beta.** Expect rough edges. Please open an issue for anything that looks or
+> behaves wrong.
 
 ![Snow Leopard](preview.png)
 
@@ -13,37 +16,44 @@ button and Dock icon runs a real Herdr command.
   menus. Their shortcuts are read live from your `keys.json`. On the right are
   an agents menu, a machines status icon, the clock, a layout switcher and
   Spotlight (the command palette).
-- **Window.**
-  - It's a real window on the desktop: drag its title bar (or bottom bar) to
-    move it and the bottom-right grip to resize it. Green (or a double-click on
-    the title) zooms it to fill the desktop and back. Dragging a zoomed window
-    un-zooms it. The menu bar still moves the Herdr app window itself.
+- **A real window on the desktop.**
+  - Drag its title bar (or bottom bar) to move it and the bottom-right grip to
+    resize it. Green, or a double-click on the title, zooms it to fill the
+    desktop and back.
   - Glossy traffic lights: red closes and yellow minimizes the Herdr window;
     green zooms the Aqua window.
-  - Tear a tab off into its own window by dragging it down out of the tab bar
-    (or with Move Tab to New Window). Each torn-off window has its own lights:
-    red closes it (the tab ends, after an alert), yellow minimizes it into the
-    Dock, green zooms it; drag its bottom-right grip to resize it. Right-click
-    its title to move the tab back, or use Window › Merge All Windows.
-- **Dock applications.** View › Dock Applications… keeps any app (Obsidian,
-  your editor) in the Dock beside Herdr; right-click one to open the shown
-  space's folder in it.
   - The toolbar has tab navigation, split and zoom controls, an action menu, a
     New menu that can start any installed agent, and a command search field.
+- **More windows.** Drag a tab down out of the tab bar (or choose Move Tab to
+  New Window) to give it its own window, with its terminals live inside. Red
+  closes it (the tab ends, after an alert), yellow minimizes it into the Dock,
+  green zooms it, and the bottom-right grip resizes it. Right-click its title to
+  move the tab back, or use Window › Merge All Windows.
+- **Notes (beta).** With Obsidian in the Dock, its icon opens your vault in an
+  Aqua window inside Herdr. The vault's folders and notes are in a source list,
+  notes render as Markdown, `[[wiki-links]]` open notes in place, and search
+  matches names and text. Edit (⌘E) changes the note; ⌘S or Done saves it, and
+  a note changed on disk in the meantime is never overwritten. Obsidian itself
+  stays one right-click away.
+- **Dock applications.** View › Dock Applications… keeps any app in the Dock
+  beside Herdr, with a light under the running ones. Right-click one to open
+  the shown space's folder in it.
 - **Source list.** Spaces are grouped by machine, with your agents below. A
   spinner means working, a red badge means it needs you, and a blue dot means
   done.
 - **Tabs and panes.** The tab bar works like Terminal.app's, with ⌘ numbers.
   Split panes get small title strips.
 - **Dock.** Each space is a folder with its initials and its agent's icon. A
-  space bounces when an agent is blocked. The Trash closes a tab or space after
-  asking first.
+  space bounces when an agent is blocked. Minimized windows wait by the Trash,
+  and the Trash closes a tab or space after asking first.
 - **Aqua dialogs.** Close confirmations, About Herdr, and Force Quit (end any
   terminal).
 - **Full screen.** View › Enter Full Screen (⌃⌘F with the keys below) fills the
-  display with the whole desktop: menu bar, window and Dock.
+  display with the whole desktop: menu bar, windows and Dock.
 - **Terminal profiles.** Choose Basic, Pro, Homebrew, Ocean or Novel under
   View › Terminal Profile.
+
+![A tab torn off into its own window, and a minimized window in the Dock](screenshots/windows.png)
 
 ## Install
 

@@ -9,7 +9,7 @@
 import { div, svg, image, PathBuilder, Background } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import {
-  keys, openOverlay, closeOverlay, pickFolder, shared, setShared, run, exec, spaces, agents, panes, layout, appHome,
+  keys, openOverlay, closeOverlay, pickFolder, shared, setShared, run, exec, spaces, agents, panes, layout, appHome, home, readTextFile,
   window as appWindow,
 } from "herdr";
 
@@ -61,6 +61,7 @@ export const C = {
 };
 
 export const ICON = {
+  note: `${A}/icons/note.svg`,
   folder: `${A}/icons/folder.svg`,
   folderNet: `${A}/icons/folder-net.svg`,
   terminal: `${A}/icons/terminal.svg`,
@@ -548,7 +549,7 @@ export function openSheet(kind, p = {}) {
   });
 }
 
-/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen, zoomWindow, tearOff: tab, raise: tab, putBack: tab, mergeAll, launch: [app, folder?], reveal: path, unDock: app }. */
+/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen, zoomWindow, tearOff: tab, raise: tab, putBack: tab, mergeAll, launch: [app, folder?], reveal: path, unDock: app, notes }. */
 export function perform(act) {
   if (!act) return;
   if (act.run) run(act.run[0], act.run[1] ?? {});
@@ -564,6 +565,7 @@ export function perform(act) {
   if (act.launch) launch(act.launch[0], act.launch[1] ?? null);
   if (act.reveal) exec("open", ["-R", act.reveal]).catch(() => {});
   if (act.unDock) removeDockApp(act.unDock);
+  if (act.notes) openNotes();
   if (act.mergeAll) mergeAll();
   if (act.newSpaceIn)
     pickFolder({ prompt: "New Space" })
@@ -842,8 +844,9 @@ export function resizeTorn(tabId, f) {
   openTorn(tabId, { at: { x: f.x, y: f.y } });
 }
 
-/** A press on a torn window's grip: the drag overlay shows the new outline; it's applied on release. */
-export function startTornResize(tabId, e, frame) {
+/** A press on a torn window's grip (or the notes window's, target "notes"): the drag
+ *  overlay shows the new outline; it's applied on release. */
+export function startTornResize(tabId, e, frame, target = null) {
   openOverlay({
     mod: "snowleopard",
     kind: "window",
@@ -851,7 +854,7 @@ export function startTornResize(tabId, e, frame) {
     width: 1,
     height: 1,
     at: { x: 0, y: 0 },
-    props: { role: "drag", mode: "tornresize", tab: tabId, start: { x: e.position.x, y: e.position.y }, frame },
+    props: { role: "drag", mode: "tornresize", tab: tabId, target, start: { x: e.position.x, y: e.position.y }, frame },
   });
 }
 
@@ -917,6 +920,66 @@ export function startTear(tabId, e, name = "") {
     at: { x: 0, y: 0 },
     props: { role: "drag", mode: "tear", tab: tabId, name, start: { x: e.position.x, y: e.position.y }, bounds: e.bounds ?? null },
   });
+}
+
+// ---- the notes window
+//
+// The Obsidian vault in an Aqua window (the "notes" role): an overlay window
+// like a torn-off tab's, opened from Obsidian's Dock icon. Shared "sl.notes" =
+// { open, min, big, at, w, h, last }: whether it's showing, minimized to the
+// Dock or zoomed, where it sits and how big, and the last note read.
+
+export const NOTES = { w: 860, h: 560 };
+
+export function notesState() {
+  return shared("sl.notes") ?? {};
+}
+
+export function setNotes(fields) {
+  setShared("sl.notes", { ...notesState(), ...fields });
+}
+
+/** Opens (or brings forward) the notes window, where it was. */
+export function openNotes(o = {}) {
+  const n = { ...notesState(), ...o };
+  openOverlay({
+    mod: "snowleopard",
+    kind: "window",
+    frame: "none",
+    // As with torn windows, the zoomed one has its own key so it can open centered.
+    key: n.big ? "sl-notes-big" : "sl-notes",
+    keep: true,
+    width: n.big ? WIN.bigW : n.w ?? NOTES.w,
+    height: n.big ? WIN.bigH : n.h ?? NOTES.h,
+    ...((n.big ? zoomedSpot() : n.at) ? { at: n.big ? zoomedSpot() : n.at } : {}),
+    props: { role: "notes" },
+  });
+  setNotes({ ...o, open: true, min: false });
+}
+
+export function closeNotes(overlay, min = false, last = undefined) {
+  setNotes({ open: false, min, ...(last ? { last } : {}) });
+  closeOverlay(overlay);
+}
+
+export function zoomNotes(overlay, last = undefined) {
+  const big = !notesState().big;
+  closeOverlay(overlay);
+  openNotes({ big, ...(last ? { last } : {}) });
+}
+
+/** A new frame from the grip: reopened in place at the new size. */
+export function resizeNotes(f) {
+  setNotes({ big: false, at: { x: f.x, y: f.y }, w: f.w, h: f.h });
+  openNotes();
+}
+
+/** The Obsidian vault to show: the open one in Obsidian's list, else the first. */
+export async function obsidianVault() {
+  const text = await readTextFile(`${home()}/Library/Application Support/obsidian/obsidian.json`);
+  if (!text) return null;
+  const vaults = Object.values(JSON.parse(text).vaults ?? {});
+  return (vaults.find((v) => v.open) ?? vaults[0])?.path ?? null;
 }
 
 // ---- applications in the Dock
