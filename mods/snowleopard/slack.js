@@ -661,8 +661,8 @@ export default class Slack {
       this.closing = true;
       closeOverlay(p.overlay);
     }
-    const w = this.size?.width ?? 0;
-    const h = this.size?.height ?? 0;
+    const w = this.size?.width ?? props()?.size?.[0] ?? 0;
+    const h = this.size?.height ?? props()?.size?.[1] ?? 0;
     const live = key();
     const body = !this.ready
       ? div().flex_1().h_full().bg("#ffffff")
@@ -696,7 +696,7 @@ export default class Slack {
           .child(paint(rrect(w, h, 5), "#00000078", w, h))
           .child(paint(rrect(w - 2, h - 2, 4, 1, 1), "#ededed", w, h))
           .child(paint(rrect(w - 2, TITLE + TOOLBAR, [4, 4, 0, 0], 1, 1), live ? vgrad(C.titleTop, C.titleBot) : vgrad(C.titleTopOff, C.titleBotOff), w, h))
-          .child(paint(rrect(w - 4, 1, 0, 2, 1), "#ffffffb0", w, h)),
+          .child(paint(rrect(w - 12, 1, 0, 6, 1), "#ffffffb0", w, h)),
       )
       .child(
         v_flex()

@@ -153,7 +153,7 @@ export default class TitleBar {
       .when(w > 0, (el) =>
         el
           .child(paint(rrect(w, h, [5, 5, 0, 0]), live ? vgrad(C.titleTop, C.titleBot) : vgrad(C.titleTopOff, C.titleBotOff), w, h))
-          .child(paint(rrect(w - 2, 1, 0, 1, 1), "#ffffffb0", w, h))
+          .child(paint(rrect(w - 12, 1, 0, 6, 1), "#ffffffb0", w, h))
           .child(div().absolute().bottom(0).left(0).w_full().h(1).bg(live ? C.titleLine : C.titleLineOff)),
       )
       .child(

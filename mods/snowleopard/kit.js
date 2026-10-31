@@ -548,7 +548,7 @@ export function openSheet(kind, p = {}) {
     frame: "none",
     width: p.width ?? w,
     height: p.height ?? h,
-    props: { role: "sheet", kind, ...p },
+    props: { role: "sheet", kind, size: [p.width ?? w, p.height ?? h], ...p },
   });
 }
 
@@ -960,7 +960,8 @@ export function openWin(name, o = {}) {
     width: n.big ? WIN.bigW : n.w ?? APP_WIN[name].w,
     height: n.big ? WIN.bigH : n.h ?? APP_WIN[name].h,
     ...((n.big ? zoomedSpot() : n.at) ? { at: n.big ? zoomedSpot() : n.at } : {}),
-    props: { role: name },
+    // The size it opens at, so it draws its background before it has measured itself.
+    props: { role: name, ...(n.big ? {} : { size: [n.w ?? APP_WIN[name].w, n.h ?? APP_WIN[name].h] }) },
   });
   setWin(name, { ...o, open: true, min: false });
 }

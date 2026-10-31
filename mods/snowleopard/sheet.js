@@ -93,8 +93,8 @@ export default class Sheet {
   }
 
   frame(body, ok) {
-    const w = this.size?.width ?? 0;
-    const h = this.size?.height ?? 0;
+    const w = this.size?.width ?? props()?.size?.[0] ?? 0;
+    const h = this.size?.height ?? props()?.size?.[1] ?? 0;
     return div()
       .id("root")
       .on_size_change((size, cx) => {
@@ -111,7 +111,7 @@ export default class Sheet {
         el
           .child(paint(rrect(w, h, 6), "#00000070", w, h))
           .child(paint(rrect(w - 2, h - 2, 5, 1, 1), vgrad("#f0f0f0", "#e4e4e4"), w, h))
-          .child(paint(rrect(w - 4, 1, 0, 2, 1), "#ffffffc0", w, h)),
+          .child(paint(rrect(w - 12, 1, 0, 6, 1), "#ffffffc0", w, h)),
       )
       .child(div().relative().size_full().child(body));
   }
