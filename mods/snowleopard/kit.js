@@ -315,7 +315,7 @@ export function textured(segments, o = {}) {
   const h = 23;
   const live = key();
   const segW = (s) => s.w ?? (s.text ? 18 + s.text.length * 7 : 32) + (s.menu ? 10 : 0);
-  const w = segments.reduce((n, s) => n + segW(s), 0) + 1;
+  const w = segments.reduce((n, s) => n + segW(s), 0);
   const rim = live ? "#555555" : "#8f8f8f";
   let x = 0;
   const parts = segments.map((s, i) => {
@@ -379,22 +379,26 @@ export function aquaButton(id, label, onClick, o = {}) {
   const w = o.w ?? Math.max(78, 26 + label.length * 7.5);
   const h = 22;
   const blue = Boolean(o.primary) && key();
-  const rim = blue ? "#2f5ea9" : "#8c8c8c";
-  const top = blue ? vgrad("#c6dcf8", "#7fb2ef") : vgrad("#ffffff", "#e9e9e9");
-  const bottom = blue ? vgrad("#5c9bec", "#b5dcff") : vgrad("#dcdcdc", "#fafafa");
+  const rim = blue ? "#3466b3" : "#9a9a9a";
+  // The gel: a pill darkest just under its middle, lit from below, with a
+  // glossy capsule over its top half. Every shape is a whole pill: rrect caps
+  // a corner at half its shape's height, so half-height halves get square ends.
+  const body = blue ? vgrad("#4a8de6", "#b9ddff") : vgrad("#d9d9d9", "#fbfbfb");
+  const gloss = blue ? vgrad("#eaf3ffe6", "#a6cdf733") : vgrad("#ffffffff", "#ffffff40");
+  const gh = Math.round((h - 2) * 0.5);
   let glow = div().absolute().top(0).left(0).size_full();
-  if (blue) glow = glow.child(paint(rrect(w - 2, h - 2, (h - 2) / 2, 1, 1), "#a8d1ff", w, h)).loop("opacity", { from: 0, to: 0.75, period: 1700 });
+  if (blue) glow = glow.child(paint(rrect(w - 2, h - 2, (h - 2) / 2, 1, 1), "#9ccaff", w, h)).loop("opacity", { from: 0, to: 0.6, period: 1700 });
   return div()
     .id(id)
     .relative()
     .flex_none()
     .w(w)
     .h(h + 2)
-    .child(paint(rrect(w, h, h / 2, 0, 1.5), "#00000018", w, h + 2))
+    .child(paint(rrect(w, h, h / 2, 0, 1.5), "#0000001a", w, h + 2))
     .child(paint(rrect(w, h, h / 2), rim, w, h))
-    .child(paint(rrect(w - 2, (h - 2) / 2, [(h - 2) / 2, (h - 2) / 2, 0, 0], 1, 1), top, w, h))
-    .child(paint(rrect(w - 2, (h - 2) / 2, [0, 0, (h - 2) / 2, (h - 2) / 2], 1, h / 2), bottom, w, h))
+    .child(paint(rrect(w - 2, h - 2, (h - 2) / 2, 1, 1), body, w, h))
     .child(glow)
+    .child(paint(rrect(w - 8, gh, gh / 2, 4, 1.5), gloss, w, h))
     .child(
       div()
         .absolute()
