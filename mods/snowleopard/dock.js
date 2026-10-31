@@ -17,7 +17,7 @@ import { h_flex } from "gpui-base";
 import { spaces, agents, run, shared, exec } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, oval, vgrad, programIcon, leadProgram, countBadge, openMenu, closeMenus, menuSize,
-  spaceItems, shortcut, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, openNotes, notesState,
+  spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, openNotes, notesState,
 } from "./kit.js";
 
 const ICON_SIZE = 48;
@@ -138,7 +138,7 @@ export default class Dock {
       .relative()
       .w(s)
       .h(s)
-      .child(image(sp.machine ? ICON.folderNet : ICON.folder).absolute().top(0).left(0).w(s).h(s))
+      .child(image(sp.machine ? ICON.folderNetPlain : ICON.folderPlain).absolute().top(0).left(0).w(s).h(s))
       .child(
         div()
           .absolute()
@@ -151,15 +151,11 @@ export default class Dock {
           .justify_center()
           .child(
             div()
-              .relative()
               .font_family("Helvetica")
-              .font_weight(700)
-              .text_size(s * 0.3)
-              .child(div().absolute().top(1).left(0).text_color("#ffffffc8").child(initials(sp.name)))
-              .child(div().relative().text_color(sp.machine ? "#46536a" : "#1f5296").child(initials(sp.name))),
+              .child(embossed(initials(sp.name), { size: Math.round(s * 0.3), lead: Math.round(s * 0.34), bold: true, color: sp.machine ? "#46536a" : "#1f5296", shadow: "#ffffffc8" })),
           ),
       )
-      .when(agent, (el) => el.child(div().absolute().bottom(-1).right(-3).child(programIcon(it.program, s * 0.42, { small: true }))));
+      .when(agent, (el) => el.child(div().absolute().bottom(2).right(0).child(programIcon(it.program, s * 0.38, { small: true }))));
   }
 
   icon(it, x) {
@@ -314,8 +310,8 @@ function miniWindow(s, program, badge = null) {
     .child(paint(rrect(w - 2, h - 11, [0, 0, 2, 2], 1, y + 10), "#141414", s, s))
     .children(["#ff6a5c", "#ffc130", "#5fcf3f"].map((c, i) => div().absolute().top(y + 3).left(4 + i * 5).w(3).h(3).rounded_full().bg(c)))
     .child(div().absolute().top(y + 13).left(4).text_size(6).font_family("Menlo").text_color("#c8c8c8").child("$ _"))
-    .when(agent, (el) => el.child(div().absolute().bottom(-1).right(-3).child(programIcon(program, s * 0.42, { small: true }))))
-    .when(Boolean(badge), (el) => el.child(image(badge).absolute().bottom(-1).right(-3).w(s * 0.42).h(s * 0.42)));
+    .when(agent, (el) => el.child(div().absolute().bottom(2).right(0).child(programIcon(program, s * 0.38, { small: true }))))
+    .when(Boolean(badge), (el) => el.child(image(badge).absolute().bottom(2).right(0).w(s * 0.38).h(s * 0.38)));
 }
 
 /** The shelf's top surface: narrower at the back, full width at the front. */

@@ -64,6 +64,9 @@ export const ICON = {
   note: `${A}/icons/note.svg`,
   folder: `${A}/icons/folder.svg`,
   folderNet: `${A}/icons/folder-net.svg`,
+  // For the Dock, which engraves initials where these have their mark.
+  folderPlain: `${A}/icons/folder-plain.svg`,
+  folderNetPlain: `${A}/icons/folder-net-plain.svg`,
   terminal: `${A}/icons/terminal.svg`,
   trash: `${A}/icons/trash.svg`,
   herdr: `${A}/img/herdr.png`,
