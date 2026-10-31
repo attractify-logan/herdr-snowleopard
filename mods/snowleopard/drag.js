@@ -10,14 +10,15 @@
 // a ghost of the tab follows the pointer; pulled 28 px out of the strip it
 // becomes a ghost window, and releasing there opens the tab's window under
 // the pointer. Released inside the strip, nothing happens. Or { mode:
-// "tornresize", tab, start, frame }: a torn-off window's grip; an outline shows
+// "tornresize", tab, target, start, frame }: a torn-off window's grip (or an
+// app window's, target "notes" or "slack"); an outline shows
 // the new size and the window takes it on release (reopening it on every frame
 // would be too heavy).
 
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { props, closeOverlay, shared, setShared } from "herdr";
-import { C, FONT, ICON, placeFrame, setSavedFrame, desktopLimits, tearOff, tearSpot, resizeTorn, resizeNotes, paint, rrect, vgrad, embossed, WIN, MIN_W, MIN_H } from "./kit.js";
+import { C, FONT, ICON, placeFrame, setSavedFrame, desktopLimits, tearOff, tearSpot, resizeTorn, resizeWin, paint, rrect, vgrad, embossed, WIN, MIN_W, MIN_H } from "./kit.js";
 
 export default class Drag {
   init(_p, cx) {
@@ -98,7 +99,7 @@ export default class Drag {
     const p = props() ?? {};
     if (p.mode === "tornresize" && this.pos && !this.done) {
       this.done = true;
-      if (p.target === "notes") resizeNotes(this.tornFrame());
+      if (p.target) resizeWin(p.target, this.tornFrame());
       else resizeTorn(p.tab, this.tornFrame());
     }
     if (p.mode === "tear" && this.out && this.pos && !this.done) {

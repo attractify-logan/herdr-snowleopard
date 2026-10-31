@@ -12,8 +12,8 @@ import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, TextView, EditorState, Editor, v_virtual_list } from "gpui-base";
 import { props, exec, readTextFile, writeTextFile, settings, closeOverlay } from "herdr";
 import {
-  C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, closeMenus, notesState, setNotes,
-  closeNotes, zoomNotes, startTornResize,
+  C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, closeMenus, winState, setWin,
+  closeWin, zoomWin, startTornResize,
 } from "./kit.js";
 import { obsidianVault } from "./kit.js";
 
@@ -73,6 +73,10 @@ function links(md) {
     });
 }
 
+// The vault as last read, kept across the window's copies (a resize, zoom or
+// restore reopens the window): a fresh copy shows it at once, then rereads.
+const KEEP = (globalThis.__snowleopardNotes ??= {});
+
 const base = (rel) => rel.split("/").pop();
 // Case-blind order. localeCompare with options is far too slow in this runtime
 // for a vault's worth of names (a whole redraw's time).
@@ -121,6 +125,10 @@ export default class Notes {
       const first = this.matches()[0];
       if (first) this.show(first, cx);
     });
+    const vault = props()?.vault ?? null;
+    if (KEEP.notes && KEEP.custom === vault) {
+      Object.assign(this, { vault: KEEP.vault, all: KEEP.all, notes: KEEP.notes, folders: KEEP.folders, note: KEEP.note, text: KEEP.text, md: KEEP.md, expanded: KEEP.expanded });
+    }
     cx.spawn(async (cx) => {
       try {
         // props.vault picks another folder (a demo vault); else Obsidian's open vault.
@@ -138,8 +146,11 @@ export default class Notes {
           .sort(byName);
         this.notes = this.all.filter((p) => /\.md$/i.test(p));
         this.index();
+        Object.assign(KEEP, { custom: props()?.vault ?? null, vault: this.vault, all: this.all, notes: this.notes, folders: this.folders, expanded: this.expanded });
+        // A copy that already shows a note keeps it.
+        if (this.note && this.notes.includes(this.note)) return cx.notify();
         // The note read last here, else the one changed last.
-        const last = notesState().last;
+        const last = winState("notes").last;
         const r2 = await exec("/bin/sh", ["-c", 'find "$1" -type f -name "*.md" -not -path "*/.*" -exec stat -f "%m %N" {} + | sort -rn | head -1 | cut -d" " -f2-', "sh", this.vault]);
         const recent = r2.stdout.trim().slice(this.vault.length + 1);
         const start = this.notes.includes(last) ? last : this.notes.includes(recent) ? recent : this.notes[0];
@@ -168,9 +179,9 @@ export default class Notes {
         this.back.push(this.note);
         this.fwd = [];
       }
-      this.note = rel;
-      this.text = text;
-      this.md = wikify(text);
+      this.note = KEEP.note = rel;
+      this.text = KEEP.text = text;
+      this.md = KEEP.md = wikify(text);
       this.status = "";
       // Open the folders down to it.
       let d = dir(rel);
@@ -263,8 +274,8 @@ export default class Notes {
     if (next !== this.text) {
       try {
         await writeTextFile(this.abs(this.note), next, this.text);
-        this.text = next;
-        this.md = wikify(next);
+        this.text = KEEP.text = next;
+        this.md = KEEP.md = wikify(next);
         this.status = "Saved.";
       } catch {
         this.status = "The note changed on disk, so this edit wasn't saved. Copy it, then reopen the note.";
@@ -286,9 +297,9 @@ export default class Notes {
     const p = props() ?? {};
     const on = live || this.lit;
     const kinds = [
-      ["close", GLYPH.close, "Close", (cx) => cx.spawn(async (cx) => (await this.save(cx)) && closeNotes(p.overlay, false, this.note))],
-      ["min", GLYPH.minus, "Minimize to the Dock", (cx) => cx.spawn(async (cx) => (await this.save(cx)) && closeNotes(p.overlay, true, this.note))],
-      ["zoom", GLYPH.plus, "Zoom", () => zoomNotes(p.overlay, this.note)],
+      ["close", GLYPH.close, "Close", (cx) => cx.spawn(async (cx) => (await this.save(cx)) && closeWin("notes", p.overlay, false, { last: this.note }))],
+      ["min", GLYPH.minus, "Minimize to the Dock", (cx) => cx.spawn(async (cx) => (await this.save(cx)) && closeWin("notes", p.overlay, true, { last: this.note }))],
+      ["zoom", GLYPH.plus, "Zoom", () => zoomWin("notes", p.overlay, { last: this.note })],
     ];
     return h_flex()
       .id("nl")
@@ -350,7 +361,7 @@ export default class Notes {
       .w_full()
       .h(TITLE + TOOLBAR)
       .on_mouse_down("left", (e, cx) => {
-        if (e.click_count >= 2) zoomNotes(props()?.overlay, this.note);
+        if (e.click_count >= 2) zoomWin("notes", props()?.overlay, { last: this.note });
       })
       .child(div().absolute().bottom(0).left(0).w_full().h(1).bg(live ? C.titleLine : C.titleLineOff))
       .child(
@@ -578,7 +589,7 @@ export default class Notes {
   render(_cx) {
     // Closed from elsewhere (sl.notes open: false): close, as torn-off windows do.
     const p = props() ?? {};
-    if (!p.vault && notesState().open === false && !this.closing) {
+    if (!p.vault && winState("notes").open === false && !this.closing) {
       this.closing = true;
       closeOverlay(p.overlay);
     }
@@ -596,8 +607,8 @@ export default class Notes {
       .on_mouse_down("left", (e) => {
         closeMenus();
         const b = e.bounds;
-        const n = notesState();
-        if (b && !n.big && (n.at?.x !== Math.round(b.x) || n.at?.y !== Math.round(b.y))) setNotes({ at: { x: Math.round(b.x), y: Math.round(b.y) } });
+        const n = winState("notes");
+        if (b && !n.big && (n.at?.x !== Math.round(b.x) || n.at?.y !== Math.round(b.y))) setWin("notes", { at: { x: Math.round(b.x), y: Math.round(b.y) } });
       })
       .on_key_down((e, cx) => {
         if (e.keystroke === "cmd-s" && this.editor) cx.spawn((cx) => this.save(cx, true));

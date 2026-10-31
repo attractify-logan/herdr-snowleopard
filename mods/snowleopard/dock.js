@@ -9,15 +9,16 @@
 // Applications kept in the Dock ("sl.dockApps", View › Dock Applications…)
 // sit beside Herdr: click opens one, right-click opens the shown space's
 // folder in it (Obsidian as a vault), and a light shows the running ones.
-// Obsidian's icon opens the vault in Herdr's own notes window (notes.js);
-// its menu still opens the app. A minimized notes window waits by the Trash.
+// Some apps open a window of their own inside Herdr (WIN_APPS): Obsidian's
+// icon opens the vault (notes.js), Slack's opens Slack (slack.js); their menus
+// still open the real app. A minimized one waits by the Trash.
 
 import { div, image, PathBuilder } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, agents, run, shared, exec } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, oval, vgrad, programIcon, leadProgram, countBadge, openMenu, closeMenus, menuSize,
-  spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, openNotes, notesState,
+  spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, openWin, winState, WIN_APPS,
 } from "./kit.js";
 
 const ICON_SIZE = 48;
@@ -64,9 +65,11 @@ export default class Dock {
   appItems(it) {
     const s = spaces().find((x) => x.active);
     const here = s && !s.machine && s.folder;
-    const notes = appName(it.app.path) === "Obsidian";
+    const win = WIN_APPS[appName(it.app.path)];
     return [
-      ...(notes ? [{ label: "Open Vault in Herdr", act: { notes: true } }, { label: "Open Obsidian App", act: { launch: [it.app.path] } }] : [{ label: "Open", act: { launch: [it.app.path] } }]),
+      ...(win
+        ? [{ label: win === "notes" ? "Open Vault in Herdr" : `Open ${it.label} in Herdr`, act: { win } }, { label: `Open ${it.label} App`, act: { launch: [it.app.path] } }]
+        : [{ label: "Open", act: { launch: [it.app.path] } }]),
       ...(here ? [{ label: `Open “${s.name}” in ${it.label}`, act: { launch: [it.app.path, s.folder] } }] : []),
       { sep: true },
       { label: "Show in Finder", act: { reveal: it.app.path } },
@@ -100,9 +103,11 @@ export default class Dock {
       if (!info) continue;
       list.push({ kind: "win", id: `win-${id}`, tab: id, label: `${info.space.name} — ${info.tab.named ? info.tab.name : `Tab ${info.tab.name}`}`, program: leadProgram(info.space.id, id) });
     }
-    if (notesState().min && dockApps().some((a) => appName(a.path) === "Obsidian")) {
-      const ob = dockApps().find((a) => appName(a.path) === "Obsidian");
-      list.push({ kind: "notesmin", id: "notesmin", label: notesState().last ? notesState().last.split("/").pop().replace(/\.md$/i, "") : "Notes", app: ob });
+    for (const a of dockApps()) {
+      const win = WIN_APPS[appName(a.path)];
+      if (!win || !winState(win).min) continue;
+      const last = winState(win).last;
+      list.push({ kind: "winmin", id: `winmin-${win}`, win, label: last ? last.split("/").pop().replace(/\.md$/i, "") : a.name, app: a });
     }
     list.push({ kind: "trash", id: "trash", label: "Trash" });
     return list;
@@ -129,7 +134,7 @@ export default class Dock {
     if (it.kind === "app") return image(ICON.herdr).w(s).h(s);
     if (it.kind === "trash") return image(ICON.trash).w(s).h(s);
     if (it.kind === "win") return miniWindow(s, it.program);
-    if (it.kind === "notesmin") return miniWindow(s, null, it.app.icon ? appIcon(it.app.path) : null);
+    if (it.kind === "winmin") return miniWindow(s, null, it.app.icon ? appIcon(it.app.path) : null);
     if (it.kind === "dapp") return it.app.icon ? image(appIcon(it.app.path)).w(s).h(s) : plainApp(s, it.label);
     const sp = it.space;
     const agent = it.program && !it.program.shell && it.program.key !== "shell";
@@ -217,10 +222,11 @@ export default class Dock {
     if (it.kind === "space") run("space.select", { id: it.space.id });
     if (it.kind === "win") restoreTorn(it.tab);
     if (it.kind === "dapp") {
-      if (appName(it.app.path) === "Obsidian") openNotes();
+      const win = WIN_APPS[appName(it.app.path)];
+      if (win) openWin(win);
       else exec("open", ["-a", it.app.path]).catch(() => {});
     }
-    if (it.kind === "notesmin") openNotes();
+    if (it.kind === "winmin") openWin(it.win);
   }
 
   light(x, bright) {
@@ -265,8 +271,8 @@ export default class Dock {
         continue;
       }
       if (it.kind === "app") kids.push(this.light(x, false));
-      const notesOpen = appName(it.app?.path ?? "") === "Obsidian" && notesState().open;
-      if (it.kind === "dapp" && (this.running.has(it.app.path) || notesOpen)) kids.push(this.light(x, false));
+      const winOpen = Boolean(winState(WIN_APPS[appName(it.app?.path ?? "")] ?? "none").open);
+      if (it.kind === "dapp" && (this.running.has(it.app.path) || winOpen)) kids.push(this.light(x, false));
       if (it.kind === "space" && (it.running || it.space.active)) kids.push(this.light(x, it.space.active));
       kids.push(this.icon(it, x).top(top - ICON_SIZE + 9));
       x += ICON_SIZE + GAP;

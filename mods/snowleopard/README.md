@@ -4,8 +4,8 @@ A Mac OS X 10.6 layout for Herdr: `layouts/snowleopard.json`, the five
 Terminal.app profiles in `themes/snowleopard*.json`, and this mod.
 One mod, many roles (`main.js`): menubar, titlebar, sidebar, tabs, pane
 (split pane strip), status, dock, desk (bare desktop spacers), menu, sheet,
-drag (overlays), aqua (a torn-off window's title bar) and notes (the
-Obsidian vault in an Aqua window). `kit.js` draws
+drag (overlays), aqua (a torn-off window's title bar) notes (the
+Obsidian vault in an Aqua window) and slack (Slack in an Aqua window). `kit.js` draws
 Aqua: gradients as px paths, glass beads (traffic lights, badges), textured
 toolbar buttons, pulsing default buttons, menus.
 
@@ -30,7 +30,7 @@ and the window opens where it's released.
 
 Keys (`keys.json`, section `layout:snowleopard`): `ctrl-f2` walks the menu
 bar menus, `cmd-alt-escape` Force Quit, `cmd-m` minimize, `ctrl-cmd-f` full screen. Mod commands:
-`snowleopard.<apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes>`.
+`snowleopard.<apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes|slack>`.
 
 View > Terminal Profile switches Basic, Pro, Homebrew, Ocean and Novel.
 `art/aurora.py` regenerates the wallpaper (numpy + Pillow).

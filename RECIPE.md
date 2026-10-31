@@ -127,6 +127,17 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   it, yellow minimizes it beside the Trash, green zooms it. It opens on the
   note read last, else the one changed last. Its Dock menu: Open Vault in
   Herdr, Open Obsidian App.
+- **Slack**: Slack's Dock icon opens an app window (`slack.js`, 900×600):
+  conversations from `users.conversations` in a 220 px source list (virtual
+  list), the open one's last 60 messages from `conversations.history` in a
+  measured `list` (Slack mrkdwn turned into Markdown once on arrival: user,
+  channel and link tokens, emphasis, a few emoji), "N replies" opening the
+  thread (`conversations.replies`), and a message field (`chat.postMessage`,
+  into the open thread if any). It polls the open conversation every 5 s and
+  the list every 2 minutes. A user token (`xoxp-`) from the person's own Slack
+  app (the setup panel opens api.slack.com with a manifest of user scopes, and
+  can copy the manifest) is checked with `auth.test` and kept in the Keychain
+  (`security`, service `herdr-snowleopard-slack`). Sign Out deletes it.
 - **Dock applications**: View › Dock Applications… (or right-click Herdr in
   the Dock) lists every app in /Applications, /System/Applications, their
   Utilities and ~/Applications with its icon and an Aqua checkbox; checked
@@ -199,7 +210,7 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   folder, Terminal and Trash; one-color glyphs tinted with `svg()`).
 - Optional keys (`keys.json`, section `layout:snowleopard`):
   `"ctrl-f2": "snowleopard.menus"`, `"cmd-alt-escape": "snowleopard.forcequit"`,
-  `"cmd-m": "window.minimize"`, `"ctrl-cmd-f": "snowleopard.fullscreen"`. Mod commands: `snowleopard.apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes`.
+  `"cmd-m": "window.minimize"`, `"ctrl-cmd-f": "snowleopard.fullscreen"`. Mod commands: `snowleopard.apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes|slack`.
 
 ## Watch out
 
@@ -235,6 +246,12 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   cheap: the notes window converts a note once when it loads, indexes the
   vault once, compares names with plain lowercase `<`, and draws its source
   list with `v_virtual_list` (only the visible rows).
+- Herdr can't resize or zoom an overlay window in place, so the app windows
+  reopen, and a reopened window is a fresh copy of the mod. Their data lives on
+  `globalThis` (module-level state didn't survive), so a new copy shows the
+  same note or conversation at once instead of reloading.
+- Overlay windows always sit above the layout, so the main Aqua window can't
+  be brought in front of one; minimize the window to get it out of the way.
 - A shared write redraws every part of the layout at once, so the notes window
   remembers the last note read only when it closes.
 - `.when(cond, ...)` needs a real boolean: `undefined` reaches the native side
