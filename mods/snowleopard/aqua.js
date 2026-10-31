@@ -1,24 +1,78 @@
-// A torn-off window's title bar: a tab that left the main window lives in its
-// own Aqua window (an overlay window over its terminals; see kit.js). Red
-// puts the tab back in the main window, yellow minimizes it to the Dock,
-// green zooms it. Drag the title to move it (Herdr moves overlay windows by
+// A torn-off window's title bar and bottom edge (props.part "bar"): a tab that
+// left the main window lives in its own Aqua window (an overlay window over its
+// terminals; see kit.js). Red closes it, as a Mac window does: the tab and its
+// terminals end, after the alert. Yellow minimizes it to the Dock, green zooms
+// it; right-click the title to move the tab back to the main window. The
+// bottom edge's grip resizes it. Drag the title to move it (Herdr moves overlay windows by
 // any press the mod doesn't stop); double-click zooms. Looks key while Herdr
 // is in front (see key() in kit.js).
 
-import { div, image } from "gpui-kit";
+import { div, image, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { props, panes, closeOverlay } from "herdr";
-import { C, GLYPH, ICON, key, paint, rrect, vgrad, embossed, bead, closeMenus, torn, tabInfo, putBack, minimizeTorn, zoomTorn, placeTorn } from "./kit.js";
+import {
+  C, GLYPH, ICON, WIN, key, paint, rrect, vgrad, embossed, bead, closeMenus, openMenu, openSheet, torn, tabInfo, putBack, minimizeTorn, zoomTorn,
+  placeTorn, startTornResize, appSize,
+} from "./kit.js";
 
 export default class AquaWindow {
+  // The bottom edge: Terminal's window frame below the terminals, with the
+  // resize grip in the corner. A press elsewhere on it moves the window.
+  bar(p) {
+    const w = this.size?.width ?? 0;
+    const h = this.size?.height ?? WIN.bar;
+    const live = key();
+    return div()
+      .id("root")
+      .on_size_change((size, cx) => {
+        this.size = size;
+        cx.notify();
+      })
+      .relative()
+      .size_full()
+      .when(w > 0, (el) => el.child(paint(rrect(w, h, [0, 0, 5, 5]), live ? vgrad("#c9c9c9", "#a9a9a9") : vgrad("#e9e9e9", "#d6d6d6"), w, h)))
+      .child(div().absolute().top(0).left(0).w_full().h(1).bg(live ? "#6a6a6a" : "#a5a5a5"))
+      .child(
+        div()
+          .id("grip")
+          .absolute()
+          .bottom(0)
+          .right(0)
+          .w(16)
+          .h(h)
+          .flex()
+          .items_end()
+          .justify_end()
+          .p(2)
+          .cursor_nwse_resize()
+          .child(svg(GLYPH.grip).w(10).h(10).text_color("#000000"))
+          .tooltip("Drag to resize the window")
+          .on_mouse_down("left", (e, cx) => {
+            cx.stop_propagation();
+            const t = torn()[p.tab];
+            const b = e.bounds;
+            if (!t || !b) return;
+            // The grip sits in the window's bottom right corner: that and the size give its
+            // frame. The bar is as wide as the window; a zoomed one's height is a share of the app.
+            const a = appSize();
+            const fw = Math.round(this.size?.width ?? t.w ?? WIN.w);
+            const fh = t.big && a ? Math.round(a.h * WIN.bigH) : t.h ?? WIN.h;
+            const right = b.x + b.width;
+            const bottom = b.y + b.height;
+            startTornResize(p.tab, e, { x: Math.round(right - fw), y: Math.round(bottom - fh), w: fw, h: fh });
+          }),
+      );
+  }
+
   init() {
     this.size = null;
     this.lit = false;
     this.closing = false;
   }
 
-  render(_cx) {
+  render(cx) {
     const p = props() ?? {};
+    if (p.part === "bar") return this.bar(p);
     const id = p.tab;
     const info = tabInfo(id);
     // Put back from elsewhere (Window › Merge All Windows): close. Not when the tab
@@ -38,7 +92,7 @@ export default class AquaWindow {
     // Only the standard-size window's spot is kept; zoomed ones open centered.
     const place = (b, dx, dy) => b && !torn()[id]?.big && placeTorn(id, { x: Math.round(b.x - dx), y: Math.round(b.y - dy) });
     const lights = [
-      ["close", GLYPH.close, "Put Back in Main Window", () => putBack(id, p.overlay)],
+      ["close", GLYPH.close, "Close Tab…", () => openSheet("closetab", { tab: id })],
       ["min", GLYPH.minus, "Minimize to the Dock", () => minimizeTorn(id, p.overlay)],
       ["zoom", GLYPH.plus, "Zoom", () => zoomTorn(id, p.overlay)],
     ];
@@ -55,6 +109,19 @@ export default class AquaWindow {
         closeMenus();
         place(e.bounds, 0, 0);
         if (e.click_count >= 2) zoomTorn(id, p.overlay);
+      })
+      .on_mouse_down("right", (e, cx) => {
+        cx.stop_propagation();
+        closeMenus();
+        openMenu(
+          [
+            { label: "Move Tab to Main Window", act: { putBack: id } },
+            { sep: true },
+            { label: "Close Tab…", act: { sheet: ["closetab", { tab: id }] } },
+          ],
+          { x: e.position.x, y: e.position.y },
+          { owner: `aqua-${id}` },
+        );
       })
       .relative()
       .size_full()

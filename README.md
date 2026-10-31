@@ -22,8 +22,12 @@ button and Dock icon runs a real Herdr command.
     green zooms the Aqua window.
   - Tear a tab off into its own window by dragging it down out of the tab bar
     (or with Move Tab to New Window). Each torn-off window has its own lights:
-    red puts the tab back, yellow minimizes it into the Dock, green zooms it.
-    Window › Merge All Windows brings them all back.
+    red closes it (the tab ends, after an alert), yellow minimizes it into the
+    Dock, green zooms it; drag its bottom-right grip to resize it. Right-click
+    its title to move the tab back, or use Window › Merge All Windows.
+- **Dock applications.** View › Dock Applications… keeps any app (Obsidian,
+  your editor) in the Dock beside Herdr; right-click one to open the shown
+  space's folder in it.
   - The toolbar has tab navigation, split and zoom controls, an action menu, a
     New menu that can start any installed agent, and a command search field.
 - **Source list.** Spaces are grouped by machine, with your agents below. A

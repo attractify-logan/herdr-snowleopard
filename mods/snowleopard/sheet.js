@@ -4,13 +4,17 @@
 //   closespace  { space }  asks, then space.close { confirmed }
 //   about       About Herdr: the icon, versions, More Info and Software Update
 //   forcequit   Force Quit Applications: every terminal; Force Quit asks first
+//   dockapps    the applications kept in the Dock: every installed app, checked or not
 // The default button is Aqua's pulsing blue gel; Return presses it, Escape
 // cancels.
 
 import { div, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { props, closeOverlay, run, spaces, agents, panes, updates, home } from "herdr";
-import { C, FONT, ICON, paint, rrect, vgrad, aquaButton, programIcon, plural, base } from "./kit.js";
+import {
+  C, FONT, ICON, paint, rrect, vgrad, aquaButton, programIcon, plural, base, dockApps, addDockApp, removeDockApp, listApps, makeAppIcons,
+  appIcon, appName,
+} from "./kit.js";
 
 export default class Sheet {
   init(_p, cx) {
@@ -19,6 +23,20 @@ export default class Sheet {
     this.asking = false;
     this.focus = cx.focus_handle();
     this.focus.focus();
+    this.apps = null;
+    this.icons = new Set();
+    if (props()?.kind === "dockapps")
+      cx.spawn(async (cx) => {
+        try {
+          this.apps = await listApps();
+          cx.notify();
+          // Icons come from each app's .icns (once; they're kept).
+          this.icons = await makeAppIcons(this.apps);
+        } catch {
+          this.apps ??= [];
+        }
+        cx.notify();
+      });
   }
 
   close() {
@@ -90,6 +108,7 @@ export default class Sheet {
     const p = props() ?? {};
     if (p.kind === "about") return this.about();
     if (p.kind === "forcequit") return this.forceQuit();
+    if (p.kind === "dockapps") return this.dockApps();
     const a = this.alert(p) ?? { title: "Unknown sheet", detail: p.kind, yes: "OK", act: () => {} };
     const ok = () => {
       this.close();
@@ -150,6 +169,62 @@ export default class Sheet {
       )
       .child(div().pt(12).text_size(9).text_color(C.gray).child("Snow Leopard layout for Herdr"));
     return this.frame(body, ok);
+  }
+
+  dockApps() {
+    const kept = new Set(dockApps().map((a) => a.path));
+    const hasIcon = (path) => this.icons.has(appIcon(path).split("/").pop());
+    const rows = (this.apps ?? []).map((path, i) => {
+      const on = kept.has(path);
+      return h_flex()
+        .id(`da-${i}`)
+        .relative()
+        .h(26)
+        .px(8)
+        .gap(8)
+        .items_center()
+        .bg(i % 2 ? "#f3f6fa" : "#ffffff")
+        // An Aqua checkbox.
+        .child(
+          div()
+            .relative()
+            .flex_none()
+            .w(14)
+            .h(14)
+            .child(paint(rrect(14, 14, 3), on ? "#2a5db5" : "#8e8e8e", 14, 14))
+            .child(paint(rrect(12, 12, 2, 1, 1), on ? vgrad("#7fb2f2", "#2f6fd6") : vgrad("#ffffff", "#e3e3e3"), 14, 14))
+            .when(on, (el) => el.child(div().absolute().top(-2).left(2).text_size(12).font_weight(700).text_color("#ffffff").child("✓"))),
+        )
+        .child(hasIcon(path) ? image(appIcon(path)).flex_none().w(20).h(20) : div().flex_none().w(20).h(20))
+        .child(div().flex_1().min_w(0).truncate().text_size(12).child(appName(path)))
+        .child(div().flex_none().text_size(10).text_color(C.gray).child(path.startsWith("/System/") ? "System" : ""))
+        .on_click((_e, cx) => {
+          if (on) removeDockApp(path);
+          else addDockApp(path);
+          cx.notify();
+        });
+    });
+    const done = () => this.close();
+    const body = v_flex()
+      .size_full()
+      .p(16)
+      .gap(10)
+      .child(div().text_size(13).font_weight(700).child("Applications in the Dock"))
+      .child(div().text_size(11).line_height(1.35).child("Check the applications to keep in the Dock beside Herdr. Click one there to open it; right-click it to open the shown space's folder in it."))
+      .child(
+        v_flex()
+          .id("da-list")
+          .flex_1()
+          .min_h(0)
+          .border_1()
+          .border_color("#8e8e8e")
+          .bg("#ffffff")
+          .overflow_y_scroll()
+          .when(this.apps === null, (el) => el.child(div().p(10).text_size(11).text_color(C.gray).child("Looking for applications…")))
+          .children(rows),
+      )
+      .child(h_flex().justify_end().child(aquaButton("da-done", "Done", done, { primary: true })));
+    return this.frame(body, done);
   }
 
   forceQuit() {

@@ -94,10 +94,14 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   the strip, and on release the tab opens as its own Aqua window right there,
   its terminals live inside (released inside the strip, nothing happens). Move
   Tab to New Window (the tab's right-click menu, the Window menu) does the
-  same. Drag the title to move it. Red puts the tab back in the main window,
-  yellow minimizes it into the Dock (between the separator and the Trash, as a
-  tiny window; click to restore in the same spot), green or a double-click on
-  the title zooms it (centered in the app; again goes back where it was).
+  same. Drag the title to move it, and the grip in its bottom edge to resize
+  it (a blue outline follows the pointer; the window takes the size on
+  release, minimum 360×180). Red closes it as a Mac window closes: an alert
+  asks, then the tab and its terminals end. Right-click the title for Move Tab
+  to Main Window. Yellow minimizes it into the Dock (between the separator and
+  the Trash, as a tiny window; click to restore in the same spot), green or a
+  double-click on the title zooms it (centered in the app; again goes back
+  where it was).
   Window › Merge All Windows brings every tab back and lists the open ones to
   bring forward. Clicking a torn-off agent in the sidebar raises its window.
   The space's last tab stays in the main window. Torn-off windows survive
@@ -107,6 +111,13 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   and Close Space…. Click a heading to fold it.
 - **Tabs**: click to select, double-click the strip for a new tab, right-click
   for rename, move left/right and close.
+- **Dock applications**: View › Dock Applications… (or right-click Herdr in
+  the Dock) lists every app in /Applications, /System/Applications, their
+  Utilities and ~/Applications with its icon and an Aqua checkbox; checked
+  ones sit in the Dock right of Herdr. Click one to open it; a light shows
+  under the running ones (a process list every 4 s). Right-click: Open, Open
+  “space” in the app (the shown space's folder; Obsidian opens it as a vault
+  with `obsidian://open?path=`), Show in Finder, Remove from Dock.
 - **Dock**: hover shows a dark name pill; clicking Herdr opens the space
   picker; clicking a space opens it; right-click lists its tabs and actions;
   clicking the Trash offers Close Tab or Close Space (each asks first).
@@ -141,7 +152,14 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   `keep: true`; `sl-win-<tab>-big` when zoomed) holding a layout: the `aqua`
   title bar block over its terminals' `{terminal}` blocks; the tab is
   `tab.settle`d while it's out and `tab.unsettle`d when it comes back. Shared
-  `sl.windows` tracks them (`min`, `big`, `at`). `kit.js` draws Aqua: px `PathBuilder` rounded
+  `sl.windows` tracks them (`min`, `big`, `at`, `w`, `h`). The window's
+  layout is the `aqua` title bar, the terminals, and an `aqua` bottom bar
+  (`part: "bar"`, 15 px) with the grip; the grip opens the `drag` overlay in
+  `tornresize` mode and the window is reopened by its key at the new size.
+  Dock applications live in shared `sl.dockApps` (`path`, `name`, `icon`);
+  their icons are made once from each bundle's `CFBundleIconFile` .icns with
+  `sips -Z 128` into `mods/snowleopard/.icons/` (hidden, so writing them
+  doesn't reload the mod). `kit.js` draws Aqua: px `PathBuilder` rounded
   rects and ovals painted with `window.paint_path` and linear gradients
   (GPUI doesn't clip gradients to rounded boxes, so parts measure themselves
   with `on_size_change`), glass beads, textured segmented buttons, gel buttons,
@@ -184,6 +202,11 @@ Ocean and Novel, using Terminal.app's ANSI palette.
 - `layout()` doesn't reflect `layout.resize` clicks (they live in
   `layouts/.state/`), so the window's placement is tracked in shared
   `sl.placed` instead of being read back from the layout.
+- Overlay windows can't be resized by Herdr, so a torn window's new size is
+  applied by reopening it (same key, in place) on release, with an outline
+  while dragging; reopening on every frame would be too heavy.
+- Apps that ship no .icns (only an asset catalog) get a plain tile with their
+  initial. `qlmanage -t` hangs from a mod's `exec`, so it isn't used.
 - Herdr's `focused()` reports layout terminal blocks but not terminal blocks
   inside overlay windows, so a mod can't tell which Aqua window has the
   keyboard. Every window looks key while Herdr is in front, rather than the

@@ -9,12 +9,15 @@
 // tab, name, start, bounds }: a tab pressed in the tab bar. As in Terminal,
 // a ghost of the tab follows the pointer; pulled 28 px out of the strip it
 // becomes a ghost window, and releasing there opens the tab's window under
-// the pointer. Released inside the strip, nothing happens.
+// the pointer. Released inside the strip, nothing happens. Or { mode:
+// "tornresize", tab, start, frame }: a torn-off window's grip; an outline shows
+// the new size and the window takes it on release (reopening it on every frame
+// would be too heavy).
 
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { props, closeOverlay, shared, setShared } from "herdr";
-import { C, FONT, ICON, placeFrame, setSavedFrame, desktopLimits, tearOff, tearSpot, paint, rrect, vgrad, embossed, WIN, MIN_W, MIN_H } from "./kit.js";
+import { C, FONT, ICON, placeFrame, setSavedFrame, desktopLimits, tearOff, tearSpot, resizeTorn, paint, rrect, vgrad, embossed, WIN, MIN_W, MIN_H } from "./kit.js";
 
 export default class Drag {
   init(_p, cx) {
@@ -22,7 +25,8 @@ export default class Drag {
     this.frame = null;
     this.want = null; // where the pointer says the window goes
     this.shown = undefined; // the frame the layout has now (null: still zoomed)
-    if (props()?.mode !== "tear") cx.timer.every(16, () => this.flush());
+    const m = props()?.mode;
+    if (m === "move" || m === "resize") cx.timer.every(16, () => this.flush());
   }
 
   /** Applies the latest wanted frame, if it moved since the last one. */
@@ -37,6 +41,10 @@ export default class Drag {
   move(e, cx) {
     const p = props() ?? {};
     if (!p.start) return;
+    if (p.mode === "tornresize") {
+      this.pos = { x: e.position.x, y: e.position.y };
+      return cx.notify();
+    }
     if (p.mode === "tear") {
       this.pos = { x: e.position.x, y: e.position.y };
       this.out = this.out || Math.abs(this.pos.y - p.start.y) >= 28;
@@ -74,8 +82,24 @@ export default class Drag {
     return { x: Math.round(p.start.x - along * w), y: f.y, w, h };
   }
 
+  /** A torn window's frame for the grip at the pointer: its top left stays. */
+  tornFrame() {
+    const p = props() ?? {};
+    const f = p.frame;
+    const at = this.pos ?? p.start;
+    const maxW = this.size ? this.size.width - f.x : Infinity;
+    const maxH = this.size ? this.size.height - f.y : Infinity;
+    const w = Math.round(Math.max(WIN.minW, Math.min(maxW, f.w + at.x - p.start.x)));
+    const h = Math.round(Math.max(WIN.minH, Math.min(maxH, f.h + at.y - p.start.y)));
+    return { x: f.x, y: f.y, w, h };
+  }
+
   end() {
     const p = props() ?? {};
+    if (p.mode === "tornresize" && this.pos && !this.done) {
+      this.done = true;
+      resizeTorn(p.tab, this.tornFrame());
+    }
     if (p.mode === "tear" && this.out && this.pos && !this.done) {
       this.done = true;
       tearOff(p.tab, tearSpot(this.pos, this.grab(), this.size));
@@ -90,7 +114,8 @@ export default class Drag {
 
   // However the overlay goes, the desk spacers may report again.
   async close() {
-    if (props()?.mode !== "tear") setShared("sl.dragging", false);
+    const m = props()?.mode;
+    if (m === "move" || m === "resize") setShared("sl.dragging", false);
   }
 
   // How far into the ghost window's title the pointer holds it: where it held the tab, scaled.
@@ -104,6 +129,11 @@ export default class Drag {
   ghost() {
     const p = props() ?? {};
     if (!this.pos) return null;
+    if (p.mode === "tornresize") {
+      // The new frame's outline, as Aqua draws a live-resize rectangle.
+      const f = this.tornFrame();
+      return div().absolute().left(f.x).top(f.y).w(f.w).h(f.h).rounded(5).border_2().border_color("#3875d7d0").bg("#3875d714");
+    }
     if (!this.out) {
       // The tab, lifted and following the pointer along the strip.
       const b = p.bounds;
@@ -161,7 +191,7 @@ export default class Drag {
       })
       .size_full()
       .when(Boolean(g), (el) => el.child(g))
-      .when(props()?.mode === "resize", (el) => el.cursor_nwse_resize())
+      .when(props()?.mode === "resize" || props()?.mode === "tornresize", (el) => el.cursor_nwse_resize())
       .on_mouse_move((e, cx) => this.move(e, cx))
       .on_mouse_up("left", () => this.end())
       .on_mouse_down("left", (_e, cx) => {

@@ -9,7 +9,7 @@
 import { div, svg, image, PathBuilder, Background } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import {
-  keys, openOverlay, closeOverlay, pickFolder, shared, setShared, run, exec, spaces, agents, panes, layout,
+  keys, openOverlay, closeOverlay, pickFolder, shared, setShared, run, exec, spaces, agents, panes, layout, appHome,
   window as appWindow,
 } from "herdr";
 
@@ -529,7 +529,7 @@ export function closeMenus() {
   setShared("sl.menu", null);
 }
 
-const SHEET = { about: [300, 340], forcequit: [440, 400] };
+const SHEET = { about: [300, 340], forcequit: [440, 400], dockapps: [400, 480] };
 
 /** Opens a sheet (the sheet role): kind and its props. */
 export function openSheet(kind, p = {}) {
@@ -544,7 +544,7 @@ export function openSheet(kind, p = {}) {
   });
 }
 
-/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen, zoomWindow, tearOff: tab, raise: tab, putBack: tab, mergeAll }. */
+/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen, zoomWindow, tearOff: tab, raise: tab, putBack: tab, mergeAll, launch: [app, folder?], reveal: path, unDock: app }. */
 export function perform(act) {
   if (!act) return;
   if (act.run) run(act.run[0], act.run[1] ?? {});
@@ -557,6 +557,9 @@ export function perform(act) {
   if (act.tearOff) tearOff(act.tearOff);
   if (act.raise) raiseTorn(act.raise);
   if (act.putBack) putBack(act.putBack);
+  if (act.launch) launch(act.launch[0], act.launch[1] ?? null);
+  if (act.reveal) exec("open", ["-R", act.reveal]).catch(() => {});
+  if (act.unDock) removeDockApp(act.unDock);
   if (act.mergeAll) mergeAll();
   if (act.newSpaceIn)
     pickFolder({ prompt: "New Space" })
@@ -715,7 +718,7 @@ export function startDrag(mode, e, width) {
 // ones wait in the Dock. `at` is the window's top left: Herdr remembers a
 // window's spot only once it's dragged, so it's kept here to reopen in place.
 
-export const WIN = { w: 660, h: 430, bigW: 0.86, bigH: 0.8, title: 22 };
+export const WIN = { w: 660, h: 430, bigW: 0.86, bigH: 0.8, title: 22, bar: 15, minW: 360, minH: 180 };
 
 export function torn() {
   return shared("sl.windows") ?? {};
@@ -756,8 +759,8 @@ function openTorn(tabId, o = {}) {
     // The zoomed window has its own key: reopening a key keeps its old spot, whatever `at` says.
     key: `sl-win-${tabId}${o.big ? "-big" : ""}`,
     keep: true,
-    width: o.big ? WIN.bigW : WIN.w,
-    height: o.big ? WIN.bigH : WIN.h,
+    width: o.big ? WIN.bigW : torn()[tabId]?.w ?? WIN.w,
+    height: o.big ? WIN.bigH : torn()[tabId]?.h ?? WIN.h,
     ...(at ? { at } : {}),
     layout: {
       type: "column",
@@ -765,14 +768,19 @@ function openTorn(tabId, o = {}) {
       shadow: "lg",
       border: { width: 1, color: "#00000070" },
       background: "background",
-      children: [{ type: "block", size: { px: WIN.title }, content: { mod: "snowleopard", props: { role: "aqua", tab: tabId } } }, body],
+      children: [
+        { type: "block", size: { px: WIN.title }, content: { mod: "snowleopard", props: { role: "aqua", tab: tabId } } },
+        body,
+        // The bottom edge and its resize grip.
+        { type: "block", size: { px: WIN.bar }, content: { mod: "snowleopard", props: { role: "aqua", part: "bar", tab: tabId } } },
+      ],
     },
   });
   return true;
 }
 
 /** The app window's size, from the desktop spacers' reports (sl.desk). */
-function appSize() {
+export function appSize() {
   const d = shared("sl.desk") ?? {};
   const w = d["desk-top"]?.w;
   if (!w) return null;
@@ -789,6 +797,9 @@ function zoomedSpot() {
 /** Moves a tab to its own window (at: its top left, else where it last was). */
 export function tearOff(tabId, at = null) {
   if (!canTear(tabId)) return;
+  // Forget windows whose tabs were closed.
+  const known = Object.fromEntries(Object.entries(torn()).filter(([id]) => tabInfo(id)));
+  if (Object.keys(known).length !== Object.keys(torn()).length) setTorn(known);
   const info = tabInfo(tabId);
   // Show a neighbor in the main window first, so the torn tab isn't the shown one.
   if (info.tab.active) {
@@ -816,6 +827,28 @@ export function putBack(tabId, overlay = null) {
 export function mergeAll() {
   // Each window's title bar closes its window once its tab is back.
   for (const id of Object.keys(torn())) putBack(id, null);
+}
+
+/** A new size for a torn window (its top left stays), from its grip. */
+export function resizeTorn(tabId, f) {
+  const w = torn()[tabId];
+  if (!w) return;
+  setTorn({ ...torn(), [tabId]: { ...w, big: false, at: { x: f.x, y: f.y }, w: f.w, h: f.h } });
+  // Reopening the same key replaces the window in place, at its new size.
+  openTorn(tabId, { at: { x: f.x, y: f.y } });
+}
+
+/** A press on a torn window's grip: the drag overlay shows the new outline; it's applied on release. */
+export function startTornResize(tabId, e, frame) {
+  openOverlay({
+    mod: "snowleopard",
+    kind: "window",
+    frame: "none",
+    width: 1,
+    height: 1,
+    at: { x: 0, y: 0 },
+    props: { role: "drag", mode: "tornresize", tab: tabId, start: { x: e.position.x, y: e.position.y }, frame },
+  });
 }
 
 /** Records where a torn window is (its title bar's top left), after a drag. */
@@ -880,6 +913,78 @@ export function startTear(tabId, e, name = "") {
     at: { x: 0, y: 0 },
     props: { role: "drag", mode: "tear", tab: tabId, name, start: { x: e.position.x, y: e.position.y }, bounds: e.bounds ?? null },
   });
+}
+
+// ---- applications in the Dock
+//
+// Shared "sl.dockApps" = [{ path, name, icon }]: apps kept in the Dock beside
+// Herdr. Their icons are converted once from each bundle's .icns with sips into
+// a hidden folder (Herdr doesn't reload a mod for hidden files).
+
+export const APP_ICONS = `${A}/.icons`;
+const APP_DIRS = ["/Applications", "/Applications/Utilities", "/System/Applications", "/System/Applications/Utilities"];
+
+export function dockApps() {
+  return shared("sl.dockApps") ?? [];
+}
+
+export function appName(path) {
+  return path.split("/").pop().replace(/\.app$/, "");
+}
+
+export function appIcon(path) {
+  return `${APP_ICONS}/${appName(path).replace(/[^A-Za-z0-9_.-]/g, "_")}.png`;
+}
+
+// $1: the icon folder; the rest: .app bundles. Prints the icons it has.
+const ICON_SH = `out="$1"; shift; mkdir -p "$out"
+for a in "$@"; do
+  n=$(basename "$a" .app | sed 's/[^A-Za-z0-9_.-]/_/g')
+  [ -f "$out/$n.png" ] && continue
+  f=$(plutil -extract CFBundleIconFile raw "$a/Contents/Info.plist" 2>/dev/null) || continue
+  case "$f" in *.icns) ;; *) f="$f.icns" ;; esac
+  [ -f "$a/Contents/Resources/$f" ] && sips -s format png -Z 128 "$a/Contents/Resources/$f" --out "$out/$n.png" >/dev/null 2>&1
+done
+ls "$out"`;
+
+/** Makes the icons these apps lack; resolves with the icon file names there are. */
+export async function makeAppIcons(paths) {
+  const r = await exec("/bin/sh", ["-c", ICON_SH, "sh", `${appHome()}/${APP_ICONS}`, ...paths]);
+  return new Set(r.stdout.split("\n").filter(Boolean));
+}
+
+/** Every application in the usual folders (and ~/Applications), by name. */
+export async function listApps() {
+  const dirs = [...APP_DIRS, "$HOME/Applications"].map((d) => `"${d}"`).join(" ");
+  const r = await exec("/bin/sh", ["-c", `find ${dirs} -maxdepth 1 -name '*.app' 2>/dev/null`]);
+  const seen = new Set();
+  return r.stdout
+    .split("\n")
+    .filter(Boolean)
+    .filter((p) => !seen.has(appName(p)) && seen.add(appName(p)))
+    .sort((a, b) => appName(a).localeCompare(appName(b)));
+}
+
+export function addDockApp(path) {
+  if (dockApps().some((a) => a.path === path)) return;
+  setShared("sl.dockApps", [...dockApps(), { path, name: appName(path), icon: false }]);
+  // Its icon, made now if the picker hasn't yet; the Dock shows it once it's there.
+  makeAppIcons([path])
+    .then((have) => {
+      if (!have.has(appIcon(path).split("/").pop())) return;
+      setShared("sl.dockApps", dockApps().map((a) => (a.path === path ? { ...a, icon: true } : a)));
+    })
+    .catch(() => {});
+}
+
+export function removeDockApp(path) {
+  setShared("sl.dockApps", dockApps().filter((a) => a.path !== path));
+}
+
+/** Opens an app, or a folder in it. Obsidian opens a folder as a vault by URL. */
+export function launch(path, folder = null) {
+  if (folder && appName(path) === "Obsidian") return exec("open", [`obsidian://open?path=${encodeURIComponent(folder)}`]).catch(() => {});
+  return exec("open", ["-a", path, ...(folder ? [folder] : [])]).catch(() => {});
 }
 
 // ---- words

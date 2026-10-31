@@ -6,13 +6,16 @@
 // space with a blocked agent bounces until you look. Hover shows the name,
 // click opens, right-click lists its tabs. Minimized torn-off windows wait
 // between the separator and the Trash; click one to bring it back.
+// Applications kept in the Dock ("sl.dockApps", View › Dock Applications…)
+// sit beside Herdr: click opens one, right-click opens the shown space's
+// folder in it (Obsidian as a vault), and a light shows the running ones.
 
 import { div, image, PathBuilder } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, agents, run, shared } from "herdr";
+import { spaces, agents, run, shared, exec } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, oval, vgrad, programIcon, leadProgram, countBadge, openMenu, closeMenus, menuSize,
-  spaceItems, shortcut, torn, tabInfo, restoreTorn,
+  spaceItems, shortcut, torn, tabInfo, restoreTorn, dockApps, appIcon,
 } from "./kit.js";
 
 const ICON_SIZE = 48;
@@ -31,14 +34,49 @@ function initials(name) {
 }
 
 export default class Dock {
-  init() {
+  init(_p, cx) {
     this.size = null;
     this.hover = null;
+    this.running = new Set();
+    // Which kept apps are running, for their lights: a process list every few seconds.
+    this.poll(cx);
+    cx.timer.every(4000, (cx) => this.poll(cx));
+  }
+
+  poll(cx) {
+    const apps = dockApps();
+    if (!apps.length) return;
+    cx.spawn(async (cx) => {
+      try {
+        const r = await exec("ps", ["-axo", "comm="]);
+        const procs = r.stdout.split("\n");
+        const now = new Set(apps.filter((a) => procs.some((l) => l.startsWith(`${a.path}/Contents/MacOS/`))).map((a) => a.path));
+        if ([...now].join() !== [...this.running].join()) {
+          this.running = now;
+          cx.notify();
+        }
+      } catch {}
+    });
+  }
+
+  appItems(it) {
+    const s = spaces().find((x) => x.active);
+    const here = s && !s.machine && s.folder;
+    return [
+      { label: "Open", act: { launch: [it.app.path] } },
+      ...(here ? [{ label: `Open “${s.name}” in ${it.label}`, act: { launch: [it.app.path, s.folder] } }] : []),
+      { sep: true },
+      { label: "Show in Finder", act: { reveal: it.app.path } },
+      { label: "Remove from Dock", act: { unDock: it.app.path } },
+      { sep: true },
+      { label: "Dock Applications…", act: { sheet: ["dockapps", {}] } },
+    ];
   }
 
   items() {
     const ags = agents();
     const list = [{ kind: "app", id: "herdr", label: "Herdr" }];
+    for (const a of dockApps()) list.push({ kind: "dapp", id: `app-${a.path}`, label: a.name, app: a });
     for (const s of spaces()) {
       const mine = ags.filter((a) => a.space === s.id);
       list.push({
@@ -84,6 +122,7 @@ export default class Dock {
     if (it.kind === "app") return image(ICON.herdr).w(s).h(s);
     if (it.kind === "trash") return image(ICON.trash).w(s).h(s);
     if (it.kind === "win") return miniWindow(s, it.program);
+    if (it.kind === "dapp") return it.app.icon ? image(appIcon(it.app.path)).w(s).h(s) : plainApp(s, it.label);
     const sp = it.space;
     const agent = it.program && !it.program.shell && it.program.key !== "shell";
     // The folder, its initials engraved on the front like Applications' "A".
@@ -155,6 +194,8 @@ export default class Dock {
       .on_mouse_down("right", (e, cx) => {
         cx.stop_propagation();
         if (it.kind === "space") this.menuAbove(spaceItems(it.space), e.bounds);
+        if (it.kind === "dapp") this.menuAbove(this.appItems(it), e.bounds);
+        if (it.kind === "app") this.menuAbove([{ label: "Dock Applications…", act: { sheet: ["dockapps", {}] } }], e.bounds);
         if (it.kind === "win")
           this.menuAbove(
             [
@@ -171,6 +212,7 @@ export default class Dock {
     if (it.kind === "app") return run("mod.open", { name: "picker" });
     if (it.kind === "space") run("space.select", { id: it.space.id });
     if (it.kind === "win") restoreTorn(it.tab);
+    if (it.kind === "dapp") exec("open", ["-a", it.app.path]).catch(() => {});
   }
 
   light(x, bright) {
@@ -215,6 +257,7 @@ export default class Dock {
         continue;
       }
       if (it.kind === "app") kids.push(this.light(x, false));
+      if (it.kind === "dapp" && this.running.has(it.app.path)) kids.push(this.light(x, false));
       if (it.kind === "space" && (it.running || it.space.active)) kids.push(this.light(x, it.space.active));
       kids.push(this.icon(it, x).top(top - ICON_SIZE + 9));
       x += ICON_SIZE + GAP;
@@ -231,6 +274,16 @@ export default class Dock {
       .font_family(FONT)
       .when(bw > 0, (el) => el.children(kids));
   }
+}
+
+/** An app without an .icns: a rounded tile with its initial. */
+function plainApp(s, name) {
+  return div()
+    .relative()
+    .w(s)
+    .h(s)
+    .child(paint(rrect(s - 6, s - 6, 10, 3, 3), vgrad("#f2f2f2", "#b9bfc8"), s, s))
+    .child(div().absolute().top(0).left(0).size_full().flex().items_center().justify_center().font_family("Helvetica").font_weight(700).text_size(s * 0.42).text_color("#4a5160").child(String(name ?? "?").slice(0, 1).toUpperCase()));
 }
 
 /** A minimized window in the Dock: a tiny Aqua window, its program's icon badged on it. */
