@@ -304,6 +304,113 @@ export function gauge(pct, w = 34, h = 7, o = {}) {
     );
 }
 
+/** A left-to-right gradient. */
+export function hgrad(left, right) {
+  return cached(GRADS, `h${left},${right}`, () => Background.linear_gradient(90, left, right));
+}
+
+function tri(up, x, y) {
+  return cached(PATHS, `t${up},${x},${y}`, () =>
+    (up ? PathBuilder.fill().move_to(x + 3.5, y).line_to(x + 7, y + 5).line_to(x, y + 5) : PathBuilder.fill().move_to(x, y).line_to(x + 7, y).line_to(x + 3.5, y + 5)).close().build(),
+  );
+}
+
+const SCROLL_W = 15;
+const SCROLL_ARROW = 15;
+
+/**
+ * Aqua's vertical scrollbar, for a list that scrolls itself and paints none (the
+ * list says only which rows it drew): a grooved track, a glossy blue thumb (gray
+ * in a window in back) sized to the rows on screen, and both arrows at the
+ * bottom, as Snow Leopard sets them. o: { id, state (an object the view keeps),
+ * live, count, first, shown, onStep(dir, cx), onPage(dir, cx), onDrag(first, cx) }.
+ * The thumb drags while the view passes its mouse moves to dragScroll(state, ...)
+ * and its mouse ups to endScroll(state).
+ */
+export function aquaScrollbar(o) {
+  const st = o.state;
+  const h = st.h ?? 0;
+  const track = Math.max(0, h - 2 * SCROLL_ARROW);
+  const w = SCROLL_W;
+  const can = o.count > 0 && o.shown < o.count;
+  const th = can ? Math.max(22, Math.min(track, Math.round((o.shown / o.count) * track))) : 0;
+  const ty = can ? Math.min(track - th, Math.round((o.first / Math.max(1, o.count - o.shown)) * (track - th))) : 0;
+  const ink = o.live ? "#2e2e2e" : "#8c8c8c";
+  const arrow = (up) =>
+    div()
+      .id(`${o.id}-${up ? "up" : "down"}`)
+      .absolute()
+      .left(0)
+      .top(track + (up ? 0 : SCROLL_ARROW))
+      .w(w)
+      .h(SCROLL_ARROW)
+      .child(paint(rrect(w - 1, SCROLL_ARROW, 0, 1, 0), hgrad("#fbfbfb", "#d9d9d9"), w, SCROLL_ARROW))
+      .child(div().absolute().top(0).left(1).w(w - 1).h(1).bg("#a9a9a9"))
+      .child(paint(tri(up, 4.5, 5), ink, w, SCROLL_ARROW))
+      .active((s) => s.opacity(0.6))
+      .on_mouse_down("left", (_e, cx) => {
+        cx.stop_propagation();
+        if (can) o.onStep(up ? -1 : 1, cx);
+      });
+  return div()
+    .id(o.id)
+    .relative()
+    .flex_none()
+    .w(w)
+    .h_full()
+    .on_size_change((size, cx) => {
+      if (Math.round(size.height) !== st.h) {
+        st.h = Math.round(size.height);
+        cx.notify();
+      }
+    })
+    .child(div().absolute().top(0).left(0).w(1).h_full().bg("#a3a3a3"))
+    .when(h > 0, (el) =>
+      el
+        .child(paint(rrect(w - 1, track, 0, 1, 0), hgrad("#d2d2d2", "#f9f9f9"), w, h))
+        .child(paint(rrect(w - 5, Math.max(0, track - 4), (w - 5) / 2, 3, 2), hgrad("#c4c4c4", "#ececec"), w, h))
+        .when(can, (el) =>
+          el
+            .child(paint(rrect(w - 3, th, (w - 3) / 2, 2, ty), o.live ? "#2756ad" : "#8a8a8a", w, h))
+            .child(paint(rrect(w - 5, th - 2, (w - 5) / 2, 3, ty + 1), o.live ? hgrad("#4f8fec", "#b4d8ff") : hgrad("#b9b9b9", "#efefef"), w, h))
+            .child(paint(rrect(4, Math.max(2, th - 8), 2, 4, ty + 4), o.live ? "#ffffff8c" : "#ffffffa0", w, h)),
+        )
+        .child(
+          div()
+            .id(`${o.id}-track`)
+            .absolute()
+            .top(0)
+            .left(0)
+            .w(w)
+            .h(track)
+            .on_mouse_down("left", (e, cx) => {
+              cx.stop_propagation();
+              if (!can || !e.bounds) return;
+              const y = e.position.y - e.bounds.y;
+              if (y >= ty && y <= ty + th) st.drag = { y: e.position.y, first: o.first, per: Math.max(1, o.count - o.shown) / Math.max(1, track - th), onDrag: o.onDrag };
+              else o.onPage(y < ty ? -1 : 1, cx);
+            }),
+        )
+        .child(arrow(true))
+        .child(arrow(false)),
+    );
+}
+
+/** A mouse move over the view while the thumb is held. */
+export function dragScroll(st, e, cx) {
+  const d = st.drag;
+  if (!d) return;
+  const first = Math.max(0, Math.round(d.first + (e.position.y - d.y) * d.per));
+  if (first !== d.last) {
+    d.last = first;
+    d.onDrag(first, cx);
+  }
+}
+
+export function endScroll(st) {
+  st.drag = null;
+}
+
 /** Aqua's red count badge (the Dock's, Mail's): white rim, glossy red, bold white digits. */
 export function countBadge(text, h = 20) {
   const label = String(text);

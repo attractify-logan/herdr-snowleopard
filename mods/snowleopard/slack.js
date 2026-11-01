@@ -13,20 +13,20 @@
 // Redraws stay cheap (Herdr budgets each one): messages are converted once when
 // they arrive, and both lists draw only what's on screen.
 
-import { div, svg, image, list } from "gpui-kit";
-import { h_flex, v_flex, InputState, Input, TextView, v_virtual_list, VirtualListScrollHandle, Scrollbar } from "gpui-base";
-import { props, exec, closeOverlay } from "herdr";
+import { div, svg, image } from "gpui-kit";
+import { h_flex, v_flex, InputState, Input, TextView, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
+import { props, exec, closeOverlay, setShared } from "herdr";
 import {
   C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, aquaButton, closeMenus, winState, setWin,
-  closeWin, zoomWin, startTornResize, dockApps, appIcon, appName, openWin,
+  closeWin, zoomWin, startTornResize, dockApps, appIcon, appName, openWin, aquaScrollbar, dragScroll, endScroll,
 } from "./kit.js";
+import { KEEP, KEYCHAIN, slackApi, slackSignIn, loadUsers, loadConvs, unread, markSeen, slackShown } from "./slackwatch.js";
 
 const TITLE = 22;
 const TOOLBAR = 32;
 const BAR = 15;
 const SIDE = 220;
 const ROW = 20;
-const KEYCHAIN = "herdr-snowleopard-slack";
 
 const SCOPES = ["channels:read", "channels:history", "groups:read", "groups:history", "im:read", "im:history", "mpim:read", "mpim:history", "users:read", "chat:write"];
 const MANIFEST = {
@@ -42,17 +42,6 @@ const EMOJI = {
   wave: "👋", warning: "⚠️", thinking_face: "🤔", raised_hands: "🙌", clap: "👏", point_up: "☝️", ok_hand: "👌", muscle: "💪",
   sob: "😭", grin: "😁", wink: "😉", star: "⭐", bulb: "💡", memo: "📝", calendar: "📆", link: "🔗",
 };
-
-// What the window knows, kept across its copies: a resize, zoom or restore
-// reopens the window, and a fresh copy shows this at once instead of
-// reconnecting (a mod reload starts it over).
-const KEEP = (globalThis.__snowleopardSlack ??= { token: null, me: null, users: new Map(), convs: [], cur: null, msgs: new Map(), thread: null });
-
-const form = (o) =>
-  Object.entries(o)
-    .filter(([, v]) => v !== undefined && v !== null)
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
-    .join("&");
 
 /** Text and code, alternating (code at odd places). It jumps between backticks: a regex or a
  *  per-character scan costs too much in this runtime (see notes.js). */
@@ -97,14 +86,52 @@ function clock(ts) {
   return `${h}:${m} ${pm ? "PM" : "AM"}`;
 }
 
+/** Mail's source-list count: a gray-blue pill (red for a mention), white on a selected row. */
+function countPill(n, on, mention) {
+  const label = String(n > 99 ? "99+" : n);
+  const w = Math.max(20, 10 + label.length * 7);
+  const h = 14;
+  const bg = on ? "#ffffff" : mention ? vgrad("#ef5a46", "#c8241a") : vgrad("#93a3bd", "#7b8ca8");
+  return div()
+    .relative()
+    .flex_none()
+    .w(w)
+    .h(h)
+    .child(paint(rrect(w, h, h / 2), bg, w, h))
+    .child(
+      div()
+        .absolute()
+        .top(0)
+        .left(0)
+        .size_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(10)
+        .font_weight(700)
+        .text_color(on ? "#3875d7" : "#ffffff")
+        .child(label),
+    );
+}
+
 export default class Slack {
+  // People and conversations are the shared connection's (the Dock's watch refreshes them too).
+  get users() {
+    return KEEP.users;
+  }
+  set users(_v) {}
+  get convs() {
+    return KEEP.convs;
+  }
+  set convs(v) {
+    KEEP.convs = v;
+  }
+
   init(_p, cx) {
     this.size = null;
     this.lit = false;
     this.token = null;
     this.me = null; // { user, team }
-    this.users = new Map(); // id → name
-    this.convs = []; // { id, name, kind: "channel" | "private" | "dm" | "group" }
     this.cur = null;
     this.msgs = new Map(); // conversation id → converted messages, oldest first
     this.thread = null; // { ts, msgs }
@@ -114,7 +141,17 @@ export default class Slack {
     this.compose = InputState.new({ placeholder: "Message" });
     this.compose.on("submit", (_e, cx) => this.send(cx));
     this.scroll = VirtualListScrollHandle.new();
-    if (KEEP.token) {
+    // The rows the list drew last (for the scrollbar): the list scrolls itself, and says
+    // which rows are on screen only by drawing them.
+    this.vis = { lo: 0, hi: -1 };
+    this.drawn = "";
+    // Follows the newest message while the list is at the bottom.
+    this.follow = true;
+    this.sb = {};
+    cx.timer.every(120, (cx) => {
+      if (`${this.vis.lo},${this.vis.hi}` !== this.drawn) cx.notify();
+    });
+    if (KEEP.token && KEEP.me) {
       Object.assign(this, { token: KEEP.token, me: KEEP.me, users: KEEP.users, convs: KEEP.convs, cur: KEEP.cur, msgs: KEEP.msgs, thread: KEEP.thread });
       this.ready = true;
       // The list measures messages as it draws them, so the bottom moves while it settles.
@@ -124,6 +161,7 @@ export default class Slack {
           this.scroll.scroll_to_bottom();
           cx.notify();
         });
+      if (!this.cur) this.start(cx);
       this.poll(cx);
       return this.timers(cx);
     }
@@ -148,28 +186,24 @@ export default class Slack {
     Object.assign(KEEP, { token: this.token, me: this.me, users: this.users, convs: this.convs, cur: this.cur, msgs: this.msgs, thread: this.thread });
   }
 
-  async api(method, params = {}, token = this.token) {
-    const r = await fetch(`https://slack.com/api/${method}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/x-www-form-urlencoded; charset=utf-8" },
-      body: form(params),
-    });
-    if (r.status === 429) throw new Error("Slack asked to slow down; trying again shortly.");
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.error ?? "Slack said no");
-    return j;
+  api(method, params = {}) {
+    return slackApi(this.token, method, params);
   }
 
   /** Checks a token with Slack, then loads people and conversations. */
   async connect(token, cx) {
-    const who = await this.api("auth.test", {}, token);
+    this.me = await slackSignIn(token);
     this.token = token;
-    this.me = { user: who.user_id, team: who.team };
     this.keep();
     this.status = "";
     cx.notify();
-    await this.loadUsers();
+    await loadUsers();
     await this.loadConvs(cx);
+    this.start(cx);
+  }
+
+  /** Opens the conversation last read here, or the first channel. */
+  start(cx) {
     const last = winState("slack").last;
     const start = this.convs.find((c) => c.id === last) ?? this.convs.find((c) => c.kind === "channel") ?? this.convs[0];
     if (start) this.open(start.id, cx);
@@ -178,6 +212,11 @@ export default class Slack {
   async saveToken(cx) {
     const token = this.tokenField.value().trim();
     if (!token) return;
+    if (token.startsWith("xoxb-")) {
+      this.status = "That's a bot token (xoxb-): it would show the bot's messages, not yours. Paste the User OAuth Token (xoxp-).";
+      cx.notify();
+      return;
+    }
     this.status = "Checking the token with Slack…";
     cx.notify();
     try {
@@ -185,7 +224,8 @@ export default class Slack {
       await exec("security", ["add-generic-password", "-U", "-s", KEYCHAIN, "-a", "slack", "-w", token]);
       this.tokenField.set_value("");
     } catch (e) {
-      this.token = null;
+      this.token = KEEP.token = null;
+      this.me = KEEP.me = null;
       this.status = `That token didn't work: ${e.message}`;
     }
     cx.notify();
@@ -200,40 +240,13 @@ export default class Slack {
     this.cur = null;
     this.thread = null;
     this.keep();
+    setShared("sl.slackUnread", {});
     cx.notify();
-  }
-
-  async loadUsers() {
-    let cursor;
-    for (let page = 0; page < 10; page++) {
-      const j = await this.api("users.list", { limit: 200, cursor });
-      for (const u of j.members ?? []) this.users.set(u.id, u.profile?.display_name || u.real_name || u.name);
-      cursor = j.response_metadata?.next_cursor;
-      if (!cursor) break;
-    }
   }
 
   async loadConvs(cx) {
     try {
-      const out = [];
-      let cursor;
-      for (let page = 0; page < 10; page++) {
-        const j = await this.api("users.conversations", { types: "public_channel,private_channel,mpim,im", exclude_archived: true, limit: 200, cursor });
-        for (const c of j.channels ?? []) {
-          if (c.is_im) {
-            if (c.is_user_deleted) continue;
-            out.push({ id: c.id, kind: "dm", name: this.users.get(c.user) ?? c.user });
-          } else if (c.is_mpim) {
-            const names = (c.name ?? "").replace(/^mpdm-/, "").replace(/-\d+$/, "").split("--");
-            out.push({ id: c.id, kind: "group", name: names.join(", ") });
-          } else out.push({ id: c.id, kind: c.is_private ? "private" : "channel", name: c.name });
-        }
-        cursor = j.response_metadata?.next_cursor;
-        if (!cursor) break;
-      }
-      const order = { channel: 0, private: 0, group: 1, dm: 1 };
-      const lower = (s) => s.toLowerCase();
-      this.convs = KEEP.convs = out.sort((a, b) => order[a.kind] - order[b.kind] || (lower(a.name) < lower(b.name) ? -1 : lower(a.name) > lower(b.name) ? 1 : 0));
+      this.convs = await loadConvs();
       cx.notify();
     } catch (e) {
       this.status = e.message;
@@ -293,13 +306,16 @@ export default class Slack {
     try {
       const j = await this.api("conversations.history", { channel: id, limit: 60 });
       const rows = this.convert(j.messages ?? []);
+      // On screen, so read: clears its unread count (slackwatch.js).
+      if (id === this.cur && !this.thread && rows.length && slackShown()) markSeen(id, rows[rows.length - 1].ts);
       const before = this.msgs.get(id);
       const changed = !before || before.length !== rows.length || before[before.length - 1]?.ts !== rows[rows.length - 1]?.ts || before.some((m, i) => m.replies !== rows[i]?.replies);
       if (!changed) return;
       this.msgs.set(id, rows);
       if (id === this.cur) {
         cx.notify();
-        if (jump || (before && rows.length)) {
+        if (jump || (before && rows.length && this.follow)) {
+          this.follow = true;
           this.scroll.scroll_to_item(rows.length - 1, "top");
           this.scroll.scroll_to_bottom();
         }
@@ -432,8 +448,9 @@ export default class Slack {
       );
   }
 
-  convRow(c) {
+  convRow(c, news) {
     const on = c.id === this.cur;
+    const n = news?.n ?? 0;
     const mark = c.kind === "channel" ? "#" : c.kind === "private" ? "🔒" : c.kind === "group" ? "◆" : "●";
     return h_flex()
       .id(`c-${c.id}`)
@@ -446,11 +463,13 @@ export default class Slack {
       .items_center()
       .when(on, (el) => el.child(fillGrad(C.rowTop, C.rowBot)))
       .child(div().relative().flex_none().w(12).text_size(c.kind === "dm" ? 8 : 12).text_color(on ? "#ffffff" : c.kind === "dm" ? "#2fa443" : "#6a7380").child(mark))
-      .child(div().relative().flex_1().min_w(0).truncate().text_size(12).text_color(on ? "#ffffff" : C.text).font_weight(on ? 700 : 400).child(c.name));
+      .child(div().relative().flex_1().min_w(0).truncate().text_size(12).text_color(on ? "#ffffff" : C.text).font_weight(on || n ? 700 : 400).child(c.name))
+      .when(n > 0, (el) => el.child(countPill(n, on, news?.mention)));
   }
 
   sidebar(live) {
     const rows = this.convs;
+    const news = unread();
     return v_flex()
       .id("sl-side")
       .relative()
@@ -466,7 +485,7 @@ export default class Slack {
           .flex_1()
           .min_h(0)
           .child(
-            v_virtual_list("sl-convs", rows.length, ROW, (i) => rows[i].id, (range) => rows.slice(range.start, range.end).map((c) => this.convRow(c)))
+            v_virtual_list("sl-convs", rows.length, ROW, (i) => rows[i].id, (range) => rows.slice(range.start, range.end).map((c) => this.convRow(c, news[c.id])))
               .size_full()
               .on_item_click((id, cx) => this.open(id, cx)),
           ),
@@ -515,9 +534,37 @@ export default class Slack {
     return this.thread ? this.thread.msgs : this.msgs.get(this.cur) ?? [];
   }
 
+  /** Measured message heights at one width, kept across the window's copies. */
+  heights(w) {
+    if (KEEP.heights?.w !== w) KEEP.heights = { w, map: new Map() };
+    return KEEP.heights.map;
+  }
+
+  measured(w, ts, h, cx) {
+    const hs = this.heights(w);
+    const v = Math.ceil(h);
+    if (hs.get(ts) === v) return;
+    hs.set(ts, v);
+    cx.notify();
+    if (this.follow) this.scroll.scroll_to_bottom();
+  }
+
   feed() {
     const rows = this.rows();
+    const thread = Boolean(this.thread);
     const name = this.thread ? "sl-thread" : `sl-msgs-${this.cur}`;
+    if (this.visName !== name) {
+      this.visName = name;
+      this.vis = { lo: 0, hi: -1 };
+      this.follow = true;
+    }
+    this.drawn = `${this.vis.lo},${this.vis.hi}`;
+    // A virtual list (the one kind a script can scroll) takes each row's height. Each
+    // message is measured once at this width, drawn unseen behind the list.
+    const w = Math.max(0, (this.feedW ?? 0) - 15);
+    const hs = this.heights(w);
+    const sizes = rows.map((m) => hs.get(m.ts) ?? 60);
+    const todo = w > 0 ? rows.filter((m) => !hs.has(m.ts)).slice(0, 60) : [];
     return v_flex()
       .id("sl-feed")
       .relative()
@@ -525,26 +572,128 @@ export default class Slack {
       .min_h(0)
       .bg("#ffffff")
       .font_family(FONT)
-      .when(Boolean(this.thread), (el) => el.child(div().flex_none().px(14).py(6).text_size(11).font_weight(700).text_color(C.heading).border_b_1().border_color("#e2e2e2").child("THREAD")))
+      .when(Boolean(this.me?.bot || this.token?.startsWith("xoxb-")), (el) => el.child(this.botNote()))
+      .when(thread, (el) => el.child(div().flex_none().px(14).py(6).text_size(11).font_weight(700).text_color(C.heading).border_b_1().border_color("#e2e2e2").child("THREAD")))
       .child(
-        v_flex()
+        h_flex()
+          .id("sl-feedbox")
           .relative()
           .flex_1()
           .min_h(0)
+          .overflow_hidden()
+          .on_size_change((size, cx) => {
+            const fw = Math.round(size.width);
+            if (fw !== this.feedW) {
+              this.feedW = fw;
+              cx.notify();
+            }
+          })
+          .when(todo.length > 0, (el) =>
+            el.child(
+              v_flex()
+                .absolute()
+                .top(0)
+                .left(0)
+                .w(w)
+                .opacity(0)
+                .children(
+                  todo.map((m) =>
+                    v_flex()
+                      .id(`ms-${m.ts}`)
+                      .w(w)
+                      .on_size_change((size, cx) => this.measured(w, m.ts, size.height, cx))
+                      .child(this.message(m, thread)),
+                  ),
+                ),
+            ),
+          )
           .child(
-            list(name, rows.length, (i) => rows[i].ts, (i) => this.message(rows[i], Boolean(this.thread)))
+            v_virtual_list(name, rows.length, sizes.length ? sizes : 0, (i) => rows[i].ts, (range) => {
+              this.vis = { lo: range.start, hi: range.end - 1 };
+              return rows.slice(range.start, range.end).map((m) => this.message(m, thread));
+            })
               .track_scroll(this.scroll)
-              .size_full()
+              .flex_1()
+              .min_w(0)
+              .h_full()
+              .on_scroll_wheel((e) => {
+                // Scrolling up leaves the newest message; back at the bottom follows it again.
+                if (e.delta.y > 0) this.follow = false;
+                else if (this.vis.hi >= rows.length - 1) this.follow = true;
+              })
               .on_item_click((ts, cx) => {
                 const m = rows.find((r) => r.ts === ts);
                 if (!this.thread && m?.replies) this.openThread(ts, cx);
               }),
           )
-          // Always shown, so you can see where you are in a long conversation.
-          .child(Scrollbar.vertical(name).mode("always").absolute().inset_0()),
+          .child(this.scrollbar(sizes)),
       )
       .when(!rows.length, (el) => el.child(div().absolute().top(16).left(0).w_full().flex().justify_center().text_size(12).text_color(C.gray).child(this.status || "Loading messages…")))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
+  }
+
+  /** Aqua's scrollbar beside the messages: a glossy blue thumb sized to what's on screen,
+   *  both arrows at the bottom. Clicking the track pages; the thumb drags. */
+  scrollbar(sizes) {
+    const count = sizes.length;
+    const { lo, hi } = this.vis;
+    const view = this.sb.h ?? 0;
+    // In pixels, from the measured heights: where each row starts, and the whole.
+    const at = [];
+    let total = 0;
+    for (const h of sizes) {
+      at.push(total);
+      total += h;
+    }
+    const end = Math.max(0, total - view);
+    const first = hi >= count - 1 ? end : at[lo] ?? 0;
+    const rowAt = (px) => {
+      let i = 0;
+      while (i < count - 1 && at[i + 1] <= px) i++;
+      return i;
+    };
+    const go = (i, cx) => {
+      const to = Math.max(0, Math.min(count - 1, i));
+      this.follow = (at[to] ?? 0) >= end;
+      if (this.follow) this.scroll.scroll_to_bottom();
+      else this.scroll.scroll_to_item(to, "top");
+      cx.notify();
+    };
+    return aquaScrollbar({
+      id: "sl-scroll",
+      state: this.sb,
+      live: key(),
+      count: total,
+      first,
+      shown: Math.min(view, total),
+      onStep: (dir, cx) => go(dir < 0 ? (first > (at[lo] ?? 0) ? lo : lo - 1) : lo + 1, cx),
+      onPage: (dir, cx) => go(rowAt(Math.max(0, first + dir * Math.max(40, view - 40))), cx),
+      onDrag: (px, cx) => go(rowAt(px), cx),
+    });
+  }
+
+  /** A bot token sees the bot's conversations: say so, plainly, above the messages. */
+  botNote() {
+    return h_flex()
+      .id("sl-bot")
+      .flex_none()
+      .w_full()
+      .px(12)
+      .py(6)
+      .gap(10)
+      .items_center()
+      .bg("#fff6c8")
+      .border_b_1()
+      .border_color("#d9c66a")
+      .child(
+        div()
+          .flex_1()
+          .min_w(0)
+          .text_size(11)
+          .text_color("#4a3d00")
+          .child(`Signed in as the bot “${this.users.get(this.me?.user) ?? this.me?.name ?? "bot"}”, so this shows the bot's conversations, not yours, and sends as the bot. Sign out and connect your User OAuth Token (xoxp-) to see your own messages.`),
+      )
+      .child(aquaButton("sl-bot-out", "Sign Out", (_e, cx) => cx.spawn((cx) => this.signOut(cx)), { w: 80 }));
   }
 
   composer(live) {
@@ -690,6 +839,8 @@ export default class Slack {
         this.size = size;
         cx.notify();
       })
+      .on_mouse_move((e, cx) => dragScroll(this.sb, e, cx))
+      .on_mouse_up("left", () => endScroll(this.sb))
       .size_full()
       .bg("#ededed")
       .font_family(FONT)
@@ -698,8 +849,19 @@ export default class Slack {
       .child(h_flex().flex_1().min_h(0).w_full().child(body));
   }
 
-  render(_cx) {
+  render(cx) {
     const p = props() ?? {};
+    const goto = winState("slack").goto;
+    if (goto && goto !== this.went && this.token) {
+      this.went = goto;
+      cx.timer.after(0, (cx) => {
+        setWin("slack", { goto: null });
+        if (this.convs.some((c) => c.id === goto)) this.open(goto, cx);
+      });
+    } else if (!goto) this.went = null;
+    const fresh = this.cur && !this.thread && unread()[this.cur];
+    const rows = this.msgs.get(this.cur);
+    if (fresh && rows?.length && slackShown()) cx.timer.after(0, () => markSeen(this.cur, rows[rows.length - 1].ts));
     // Closed from elsewhere (sl.slack open: false): close, as torn-off windows do.
     if (!p.inTab && (winState("slack").open === false || Boolean(winState("slack").big) !== Boolean(p.big)) && !this.closing) {
       this.closing = true;
@@ -726,6 +888,8 @@ export default class Slack {
         this.size = size;
         cx.notify();
       })
+      .on_mouse_move((e, cx) => dragScroll(this.sb, e, cx))
+      .on_mouse_up("left", () => endScroll(this.sb))
       .on_mouse_down("left", (e) => {
         closeMenus();
         const b = e.bounds;

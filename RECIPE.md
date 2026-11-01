@@ -164,14 +164,37 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   (`slack.js`, 900×600):
   conversations from `users.conversations` in a 220 px source list (virtual
   list), the open one's last 60 messages from `conversations.history` in a
-  measured `list` (Slack mrkdwn turned into Markdown once on arrival: user,
+  `v_virtual_list` (the one kind a script can scroll: `track_scroll` does
+  nothing on a measured `list`), each message's height measured once per
+  width by drawing it unseen (opacity 0) behind the list with
+  `on_size_change`; it opens at the bottom and follows new messages until you
+  scroll up. Beside it, Aqua's scrollbar (`aquaScrollbar` in kit.js: grooved
+  track, glossy blue thumb, gray in back, both arrows at the bottom) placed
+  from the rows the list drew and their heights; arrows step a message, the
+  track pages, the thumb drags (the view passes its mouse moves to
+  `dragScroll`). (Slack mrkdwn turned into Markdown once on arrival: user,
   channel and link tokens, emphasis, a few emoji), "N replies" opening the
   thread (`conversations.replies`), and a message field (`chat.postMessage`,
   into the open thread if any). It polls the open conversation every 5 s and
   the list every 2 minutes. A user token (`xoxp-`) from the person's own Slack
   app (the setup panel opens api.slack.com with a manifest of user scopes, and
   can copy the manifest) is checked with `auth.test` and kept in the Keychain
-  (`security`, service `herdr-snowleopard-slack`). Sign Out deletes it.
+  (`security`, service `herdr-snowleopard-slack`). Sign Out deletes it. A bot
+  token (`xoxb-`) is refused at setup; one already kept shows a yellow note
+  that the window shows the bot's conversations.
+- **Slack unread** (`slackwatch.js`): the Dock's copy watches every 10 s, one
+  copy at a time (an owner and heartbeat on a global, so another copy takes
+  over), with the Keychain token: three direct or group conversations and one
+  channel per pass, round robin. `conversations.info` gives Slack's
+  `last_read` (and, for DMs, the latest message); anything newer than that or
+  Herdr's own read mark (`sl.slackSeen`) is counted with
+  `conversations.history` (others' messages, mentions of you). Counts go to
+  `sl.slackUnread` (written only when they change): a gray-blue pill in
+  Slack's list (red for a mention), and a red badge on the Dock's Slack icon
+  for DMs, groups and mentions. A new DM or mention while that conversation
+  isn't on screen posts `notify()` with Slack's icon; its action
+  `snowleopard.slackunread` opens Slack to it (`sl.slack.goto`). Reading a
+  conversation on screen marks it read here and with `conversations.mark`.
 - **Dock applications**: View › Dock Applications… (or right-click Herdr in
   the Dock) lists every app in /Applications, /System/Applications, their
   Utilities and ~/Applications with its icon and an Aqua checkbox; checked
@@ -245,7 +268,7 @@ Ocean and Novel, using Terminal.app's ANSI palette.
 - Optional keys (`keys.json`, section `layout:snowleopard`):
   `"ctrl-f2": "snowleopard.menus"`, `"cmd-alt-escape": "snowleopard.forcequit"`,
   `"cmd-m": "window.minimize"`, `"ctrl-cmd-f": "snowleopard.fullscreen"`,
-  `"f2": "snowleopard.renametab"`, `"shift-f2": "snowleopard.renamespace"`. Mod commands: `snowleopard.apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes|slack|slacktab|renametab|renamespace`.
+  `"f2": "snowleopard.renametab"`, `"shift-f2": "snowleopard.renamespace"`. Mod commands: `snowleopard.apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes|slack|slacktab|slackunread|renametab|renamespace`.
 
 ## Watch out
 

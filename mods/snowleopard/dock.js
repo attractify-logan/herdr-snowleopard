@@ -20,6 +20,7 @@ import {
   C, FONT, ICON, paint, rrect, oval, vgrad, programIcon, leadProgram, countBadge, openMenu, closeMenus, menuSize,
   spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, openWin, winState, WIN_APPS, openSlackTab,
 } from "./kit.js";
+import { watchSlack, slackBadge } from "./slackwatch.js";
 
 const ICON_SIZE = 48;
 const GAP = 8;
@@ -44,6 +45,8 @@ export default class Dock {
     // Which kept apps are running, for their lights: a process list every few seconds.
     this.poll(cx);
     cx.timer.every(4000, (cx) => this.poll(cx));
+    // Slack's unread messages, for its badge here and its banners (slackwatch.js).
+    watchSlack(cx);
   }
 
   poll(cx) {
@@ -84,7 +87,7 @@ export default class Dock {
   items() {
     const ags = agents();
     const list = [{ kind: "app", id: "herdr", label: "Herdr" }];
-    for (const a of dockApps()) list.push({ kind: "dapp", id: `app-${a.path}`, label: a.name, app: a });
+    for (const a of dockApps()) list.push({ kind: "dapp", id: `app-${a.path}`, label: a.name, app: a, count: WIN_APPS[appName(a.path)] === "slack" ? slackBadge() : 0 });
     for (const s of spaces()) {
       const mine = ags.filter((a) => a.space === s.id);
       list.push({

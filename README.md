@@ -39,8 +39,14 @@ and Dock icon runs a real Herdr command.
 - **Slack (beta).** With Slack in the Dock, its icon opens Slack as a tab in
   the main window (or, from its right-click menu, in its own Aqua window): channels and DMs, messages with names and threads, and a
   field to send. It uses a small Slack app of your own (the window's setup
-  panel creates it) and keeps the token in your Keychain. It polls every 5 s,
-  so there are no notifications, huddles or file uploads.
+  panel creates it) and keeps the token in your Keychain. Unread
+  conversations get a count in Slack's list, the Dock's Slack icon a red
+  badge for direct messages and mentions, and a new one a banner (click it to
+  open the conversation), even with Slack closed. Messages scroll with an
+  Aqua scrollbar and open at the newest. It polls (every 5 s for the open
+  conversation, 10 s for the watch), so there are no huddles or file uploads.
+  Use your User OAuth Token (`xoxp-`): a bot token shows the bot's
+  conversations, not yours.
 - **Dock applications.** View › Dock Applications… keeps any app in the Dock
   beside Herdr, with a light under the running ones. Right-click one to open
   the shown space's folder in it.
