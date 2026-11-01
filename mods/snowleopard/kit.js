@@ -623,6 +623,17 @@ export function programIcon(program, size, o = {}) {
     );
 }
 
+/** Herdr's status words, as people read them. */
+export const STATUS_WORD = { working: "Working", blocked: "Needs you", done: "Done", idle: "Idle" };
+
+/** A tab's one name everywhere (tab bar, title, menus, sheets, Dock): its own
+ *  name, else its lead program's ("zsh", "Claude Code"), else "Tab N". */
+export function tabLabel(spaceId, tab) {
+  if (!tab) return "";
+  if (tab.named) return tab.name;
+  return leadProgram(spaceId, tab.id)?.name ?? `Tab ${tab.name}`;
+}
+
 /** The program a space or tab shows best: its first agent's, else its first terminal's. */
 export function leadProgram(spaceId, tabId = null) {
   const a = agents().find((x) => x.space === spaceId && (!tabId || x.tab === tabId));
@@ -730,6 +741,8 @@ export function openSheet(kind, p = {}) {
     mod: "snowleopard",
     kind: "dialog",
     frame: "none",
+    // A key makes a second open replace the first instead of stacking.
+    ...(p.key ? { key: p.key } : {}),
     width: p.width ?? w,
     height: p.height ?? h,
     props: { role: "sheet", kind, size: [p.width ?? w, p.height ?? h], ...p },
@@ -739,7 +752,8 @@ export function openSheet(kind, p = {}) {
 /** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen, zoomWindow, tearOff: tab, raise: tab, putBack: tab, mergeAll, launch: [app, folder?], reveal: path, unDock: app, win: name }. */
 export function perform(act) {
   if (!act) return;
-  if (act.run) run(act.run[0], act.run[1] ?? {});
+  if (act.run?.[0] === "tab.new") newTab(act.run[1] ?? {});
+  else if (act.run) run(act.run[0], act.run[1] ?? {});
   if (act.sheet) openSheet(act.sheet[0], act.sheet[1] ?? {});
   if (act.open) exec("open", [act.open]).catch(() => {});
   if (act.toggle) run("layout.toggle", { id: act.toggle });
@@ -778,10 +792,10 @@ export function shown(id) {
 /** A space's menu (sidebar right-click, the Dock): its tabs, then what to do with it. */
 export function spaceItems(s) {
   return [
-    ...s.tabs.map((t) => ({ label: t.name, detail: t.status ?? "", checked: s.active && t.active, act: { run: ["tab.select", { id: t.id }] } })),
+    ...s.tabs.map((t) => ({ label: tabLabel(s.id, t), detail: STATUS_WORD[t.status] ?? "", checked: s.active && t.active, act: { run: ["tab.select", { id: t.id }] } })),
     { sep: true },
     { label: "Open", disabled: s.active, act: { run: ["space.select", { id: s.id }] } },
-    { label: "New Tab Here", act: { run: ["tab.new", { space: s.id }] } },
+    { label: "New Tab Here", act: { run: ["tab.new", { space: s.id }] } }, // perform → newTab
     { label: "Rename…", shortcut: s.active ? shortcut("space.rename") : "", act: { sheet: ["rename", { what: "space", id: s.id }] } },
     ...(!s.machine && s.folder ? [{ label: "Show in Finder", act: { open: s.folder } }] : []),
     { sep: true },
@@ -796,9 +810,36 @@ export function remoteSpaceItems() {
     .map((m) => ({ label: `New Space on ${m.name}`, act: { run: ["space.new", { machine: m.name }] } }));
 }
 
-// ---- preferences (Herdr › Snow Leopard Settings…), shared "sl.prefs"
+/** A new tab made here, by hand (⌘T, +, a New menu): the menu bar asks for its
+ *  name only after one of these, never for tabs that scripts and agents make. */
+export function newTab(args = {}) {
+  globalThis.__slAskName = Date.now();
+  run("tab.new", args);
+}
 
-export const PREF_DEFAULTS = { askTabName: true };
+/** Closes a tab the way Terminal does: at once when nothing is running in it but
+ *  a shell, else after the Close Tab alert (an agent, or the space's last tab). */
+export function askCloseTab(tabId) {
+  const s = spaces().find((x) => x.tabs.some((t) => t.id === tabId));
+  if (!s) return;
+  if (s.tabs.length > 1 && !agents().some((a) => a.tab === tabId)) run("tab.close", { id: tabId, confirmed: true });
+  else openSheet("closetab", { tab: tabId, key: "sl-closetab" });
+}
+
+/** Was a tab made by hand in the last two seconds? Takes the mark. */
+export function takeAskMark() {
+  const t = globalThis.__slAskName ?? 0;
+  globalThis.__slAskName = 0;
+  return Date.now() - t < 2000;
+}
+
+// ---- preferences (Herdr › Snow Leopard Settings…), shared "sl.prefs"
+//   askTabName  ask for a name after ⌘T or +
+//   bounce      bounce a space's Dock folder when an agent there starts needing you
+//   notice      show a notice (top right) when an agent starts needing you
+//   doneBadge   count finished agents in the Dock's red badges too
+
+export const PREF_DEFAULTS = { askTabName: true, bounce: true, notice: true, doneBadge: false };
 
 export function pref(name) {
   return { ...PREF_DEFAULTS, ...(shared("sl.prefs") ?? {}) }[name];

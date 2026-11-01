@@ -11,7 +11,7 @@ import {
 } from "herdr";
 import {
   C, FONT, GLYPH, ICON, paint, rrect, vgrad, fillGrad, openMenu, closeMenus, shortcut, shown, plural, torn, tabInfo, canTear, remoteSpaceItems, pref, openSheet,
-  fitFrame,
+  fitFrame, STATUS_WORD, takeAskMark,
 } from "./kit.js";
 
 export const PROFILES = [
@@ -46,7 +46,6 @@ export function userName() {
   return n.charAt(0).toUpperCase() + n.slice(1);
 }
 
-const STATUS_WORD = { working: "Working", blocked: "Needs you", done: "Done", idle: "Idle" };
 
 /** Every agent, as menu rows that focus it. */
 export function agentItems() {
@@ -338,8 +337,9 @@ export default class MenuBar {
       });
   }
 
-  /** A tab made since the last look, shown and unnamed (⌘T, +, a menu): ask for its
-   *  name, unless that's turned off in Snow Leopard Settings. Agents' tabs come named. */
+  /** A tab made by hand since the last look (⌘T, +, a New menu: newTab), shown and
+   *  unnamed: ask for its name, unless that's turned off in Snow Leopard Settings.
+   *  Tabs that scripts, the CLI and agents make are never asked about. */
   askNames(cx) {
     const now = new Set();
     let fresh = null;
@@ -349,7 +349,12 @@ export default class MenuBar {
         if (this.known && !this.known.has(t.id) && s.active && t.active && !t.named && !t.settled) fresh = t.id;
       }
     this.known = now;
-    if (fresh && pref("askTabName")) cx.timer.after(150, () => openSheet("rename", { what: "tab", id: fresh, isNew: true }));
+    if (fresh && takeAskMark() && pref("askTabName"))
+      cx.timer.after(150, () => {
+        // Still the shown tab, still unnamed? (The person may have moved on.)
+        const t = spaces().find((x) => x.active)?.tabs.find((x) => x.id === fresh && x.active && !x.named);
+        if (t) openSheet("rename", { what: "tab", id: fresh, isNew: true, key: "sl-rename" });
+      });
   }
 
   render(cx) {

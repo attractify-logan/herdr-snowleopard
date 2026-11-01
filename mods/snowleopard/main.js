@@ -32,7 +32,7 @@ import AquaWindow from "./aqua.js";
 import Notes from "./notes.js";
 import Slack from "./slack.js";
 import { spaces } from "herdr";
-import { openSheet, tearOff, mergeAll, torn, openWin, openSlackTab, setWin, winState } from "./kit.js";
+import { openSheet, tearOff, mergeAll, torn, openWin, openSlackTab, setWin, winState, newTab, askCloseTab } from "./kit.js";
 import { lastNotified } from "./slackwatch.js";
 
 const ROLES = { menubar: MenuBar, titlebar: TitleBar, sidebar: Sidebar, tabs: Tabs, pane: PaneHeader, status: StatusBar, dock: Dock, menu: Menu, sheet: Sheet, desk: Desk, drag: Drag, aqua: AquaWindow, notes: Notes, slack: Slack };
@@ -47,6 +47,13 @@ const COMMANDS = {
     if (t) tearOff(t.id);
   },
   mergeall: () => mergeAll(),
+  // ⌘T and ⌘W in this layout: a new tab that asks for its name, and a close that
+  // asks first when an agent is running in the tab (as Terminal does).
+  newtab: () => newTab({}),
+  closetab: () => {
+    const t = spaces().find((s) => s.active)?.tabs.find((t) => t.active);
+    if (t) askCloseTab(t.id);
+  },
   notes: () => openWin("notes"),
   slack: () => openWin("slack"),
   slacktab: () => openSlackTab(),
