@@ -855,6 +855,27 @@ export function applyFrame(f) {
   placeFrame(null, f);
 }
 
+/**
+ * Keeps a placed window on the desktop when the app window gets smaller (moved
+ * to a smaller display, or resized): shrinks it to fit, then moves it back on,
+ * so its bottom (where you type) never ends up off screen.
+ */
+export function fitFrame() {
+  const f = shared("sl.placed");
+  if (!f?.w || !f?.h || shared("sl.dragging")) return;
+  const v = window.viewport_size();
+  if (!v?.width || !v?.height) return;
+  const lim = desktopLimits(v);
+  const w = Math.round(Math.min(f.w, Math.max(MIN_W, lim.w)));
+  const h = Math.round(Math.min(f.h, Math.max(MIN_H, lim.h)));
+  const x = Math.round(Math.max(0, Math.min(f.x, lim.w - w)));
+  const y = Math.round(Math.max(0, Math.min(f.y, lim.h - h)));
+  if (w === f.w && h === f.h && x === f.x && y === f.y) return;
+  const to = { ...f, x, y, w, h };
+  setShared("sl.placed", to);
+  placeFrame(f, to);
+}
+
 /** Moves the window from frame `from` to `to` with as few layout changes as it
  *  takes: each one is a layout pass, so a move along one axis is one resize.
  *  From a zoomed window (no `from`) it sets them all. Touches no shared state. */

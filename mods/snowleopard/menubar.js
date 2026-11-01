@@ -11,6 +11,7 @@ import {
 } from "herdr";
 import {
   C, FONT, GLYPH, ICON, paint, rrect, vgrad, fillGrad, openMenu, closeMenus, shortcut, shown, plural, torn, tabInfo, canTear, remoteSpaceItems, pref, openSheet,
+  fitFrame,
 } from "./kit.js";
 
 export const PROFILES = [
@@ -63,6 +64,9 @@ export function agentItems() {
 export default class MenuBar {
   init(_p, cx) {
     this.widths = {};
+    // The app window can shrink under the Mac window (a smaller display): keep it on screen.
+    cx.timer.after(500, () => fitFrame());
+    cx.timer.every(1000, () => fitFrame());
     this.now = new Date();
     this.agentsToRun = [];
     const tick = (cx) => {
