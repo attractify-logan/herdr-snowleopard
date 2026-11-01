@@ -861,19 +861,53 @@ export function applyFrame(f) {
  * so its bottom (where you type) never ends up off screen.
  */
 export function fitFrame() {
-  const f = shared("sl.placed");
-  if (!f?.w || !f?.h || shared("sl.dragging")) return;
+  if (shared("sl.dragging")) return;
   const v = window.viewport_size();
   if (!v?.width || !v?.height) return;
+  const f = shared("sl.placed");
+  if (!f?.w || !f?.h) return fitWindows(v);
   const lim = desktopLimits(v);
   const w = Math.round(Math.min(f.w, Math.max(MIN_W, lim.w)));
   const h = Math.round(Math.min(f.h, Math.max(MIN_H, lim.h)));
   const x = Math.round(Math.max(0, Math.min(f.x, lim.w - w)));
   const y = Math.round(Math.max(0, Math.min(f.y, lim.h - h)));
-  if (w === f.w && h === f.h && x === f.x && y === f.y) return;
+  if (w === f.w && h === f.h && x === f.x && y === f.y) return fitWindows(v);
   const to = { ...f, x, y, w, h };
   setShared("sl.placed", to);
   placeFrame(f, to);
+  fitWindows(v);
+}
+
+/** A floating window's saved size and spot, fitted into the app window (below the menu bar). */
+function fitBox(w, h, at, v = window.viewport_size()) {
+  if (!v?.width || !v?.height) return { w, h, at };
+  const fw = Math.round(Math.min(w, Math.max(WIN.minW, v.width - 8)));
+  const fh = Math.round(Math.min(h, Math.max(WIN.minH, v.height - MENUBAR - 4)));
+  const fat = at ? { x: Math.round(Math.max(0, Math.min(at.x, v.width - fw))), y: Math.round(Math.max(MENUBAR, Math.min(at.y, v.height - fh))) } : at;
+  return { w: fw, h: fh, at: fat, moved: fw !== w || fh !== h || (at && (fat.x !== at.x || fat.y !== at.y)) };
+}
+
+/** Open floating windows (app windows, torn-off tabs) that hang off the app window: closed
+ *  and reopened fitted, since reopening a window under its key keeps its old spot. */
+function fitWindows(v) {
+  for (const name of Object.keys(APP_WIN)) {
+    const n = winState(name);
+    if (!n.open || n.min || n.big || !n.overlay) continue;
+    const f = fitBox(n.w ?? APP_WIN[name].w, n.h ?? APP_WIN[name].h, n.at, v);
+    if (!f.moved) continue;
+    setWin(name, { w: f.w, h: f.h, at: f.at });
+    closeOverlay(n.overlay);
+    openWin(name);
+  }
+  const all = torn();
+  for (const [id, t] of Object.entries(all)) {
+    if (t.min || t.big || !t.overlay) continue;
+    const f = fitBox(t.w ?? WIN.w, t.h ?? WIN.h, t.at, v);
+    if (!f.moved) continue;
+    setTorn({ ...torn(), [id]: { ...t, w: f.w, h: f.h, at: f.at } });
+    closeOverlay(t.overlay);
+    openTorn(id);
+  }
 }
 
 /** Moves the window from frame `from` to `to` with as few layout changes as it
@@ -985,16 +1019,18 @@ function openTorn(tabId, o = {}) {
   const cell = (terminal) => ({ type: "block", content: { terminal }, background: "background", padding: [4, 6] });
   const terms = info.terminals;
   // Zoomed, it opens centered; otherwise where it was.
-  const at = o.big ? zoomedSpot() : o.at ?? torn()[tabId]?.at;
+  const saved = torn()[tabId];
+  const fit = fitBox(saved?.w ?? WIN.w, saved?.h ?? WIN.h, o.at ?? saved?.at);
+  const at = o.big ? zoomedSpot() : fit.at;
   const body = terms.length === 1 ? { ...cell(terms[0]), size: { weight: 1 } } : { type: "row", size: { weight: 1 }, divider: { width: 1, color: "#8b8b8b" }, children: terms.map(cell) };
-  openOverlay({
+  const overlay = openOverlay({
     kind: "window",
     frame: "none",
     // The zoomed window has its own key: reopening a key keeps its old spot, whatever `at` says.
     key: `sl-win-${tabId}${o.big ? "-big" : ""}`,
     keep: true,
-    width: o.big ? WIN.bigW : torn()[tabId]?.w ?? WIN.w,
-    height: o.big ? WIN.bigH : torn()[tabId]?.h ?? WIN.h,
+    width: o.big ? WIN.bigW : fit.w,
+    height: o.big ? WIN.bigH : fit.h,
     ...(at ? { at } : {}),
     layout: {
       type: "column",
@@ -1010,7 +1046,8 @@ function openTorn(tabId, o = {}) {
       ],
     },
   });
-  return true;
+  if (saved && (saved.overlay !== overlay || fit.moved)) setTorn({ ...torn(), [tabId]: { ...saved, overlay, ...(o.big ? {} : { w: fit.w, h: fit.h, at: fit.at }) } });
+  return overlay || true;
 }
 
 /** The app window's size, from the desktop spacers' reports (sl.desk). */
@@ -1042,8 +1079,9 @@ export function tearOff(tabId, at = null) {
     const next = rest.find((x) => x.index > info.tab.index) ?? rest[rest.length - 1];
     if (next) run("tab.select", { id: next.id });
   }
-  if (!openTorn(tabId, { at })) return;
-  setTorn({ ...torn(), [tabId]: { min: false, big: false, at } });
+  const overlay = openTorn(tabId, { at });
+  if (!overlay) return;
+  setTorn({ ...torn(), [tabId]: { min: false, big: false, at, overlay } });
   run("tab.settle", { id: tabId });
 }
 
@@ -1135,7 +1173,7 @@ export function minimizeTorn(tabId, overlay) {
 export function restoreTorn(tabId) {
   const w = torn()[tabId];
   if (!w || !openTorn(tabId, { big: w.big })) return;
-  setTorn({ ...torn(), [tabId]: { ...w, min: false } });
+  setTorn({ ...torn(), [tabId]: { ...torn()[tabId], min: false } });
 }
 
 /** Zoom: a big window centered in the app, or back to the standard size where it was. */
@@ -1208,7 +1246,8 @@ export function setWin(name, fields) {
 /** Opens (or brings forward) an app window, where it was. */
 export function openWin(name, o = {}) {
   const n = { ...winState(name), ...o };
-  openOverlay({
+  if (!n.big) Object.assign(n, fitBox(n.w ?? APP_WIN[name].w, n.h ?? APP_WIN[name].h, n.at));
+  const overlay = openOverlay({
     mod: "snowleopard",
     kind: "window",
     frame: "none",
@@ -1221,7 +1260,7 @@ export function openWin(name, o = {}) {
     // The size it opens at, so it draws its background before it has measured itself.
     props: { role: name, big: Boolean(n.big), ...(n.big ? {} : { size: [n.w ?? APP_WIN[name].w, n.h ?? APP_WIN[name].h] }) },
   });
-  setWin(name, { ...o, open: true, min: false });
+  setWin(name, { ...o, open: true, min: false, overlay, ...(n.big ? {} : { w: n.w, h: n.h, at: n.at }) });
 }
 
 export function closeWin(name, overlay, min = false, extra = {}) {
