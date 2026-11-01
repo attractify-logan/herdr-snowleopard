@@ -120,8 +120,8 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   beside the agent in the sidebar (30×7) and in the pane's title strip
   (40×8). `contextLevels()` reads `terminals()` at most every 3 s: it hands
   over every terminal, and calling it per row ran a redraw out of time.
-- **Sidebar**: a space's disclosure triangle (▶/▼, open for the shown
-  space) lists its tabs under it, indented 36 px with their program icon and
+- **Sidebar**: a space's disclosure triangle (▶/▼; a space opens the first time it's shown and then stays as
+  set, so switching spaces never shifts the rows) lists its tabs under it, indented 36 px with their program icon and
   status (torn-off ones marked "(window)"; clicking raises the window). Hovering
   a tab or agent row swaps its status for the tab bar's gray close disc, which
   opens the Close Tab alert; right-click a tab row for Rename and Close.

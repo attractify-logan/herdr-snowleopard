@@ -23,7 +23,7 @@ export default class Sidebar {
     this.size = null;
     this.fold = {};
     this.hot = null;
-    this.open = {}; // space id → its tabs shown (default: the shown space)
+    this.open = {}; // space id → its tabs shown (a space opens when first shown)
     this.hoverRow = null;
     this.hotClose = false;
   }
@@ -176,7 +176,11 @@ export default class Sidebar {
         const tabs = s.tabs.filter((t) => !t.settled).length;
         const out = torn();
         const list = s.tabs.filter((t) => !t.settled || out[t.id]);
-        const open = this.open[s.id] ?? s.active;
+        // A space opens when it's first shown, then stays as it is until its
+        // triangle is clicked: following the shown space would fold the one left
+        // behind and make the rows below jump on every switch.
+        if (s.active && this.open[s.id] === undefined) this.open[s.id] = true;
+        const open = this.open[s.id] ?? false;
         sections.push(
           this.row(`sp-${s.id}`, {
             disclose: list.length ? open : null,
