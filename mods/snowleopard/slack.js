@@ -504,7 +504,9 @@ export default class Slack {
                 .child(div().text_size(10).text_color(C.gray).child(m.time)),
             ),
           )
-          .child(div().text_size(13).text_color(m.system ? C.gray : "#1d1d1d").child(TextView.markdown(`md-${m.ts}`, m.md).selectable(true)))
+          // Not selectable: text selection takes the theme's terminal selection color (dark
+          // gray in the Pro profile), which covered messages like black bars.
+          .child(div().text_size(13).text_color(m.system ? C.gray : "#1d1d1d").child(TextView.markdown(`md-${m.ts}`, m.md)))
           .when(!inThread && m.replies > 0, (el) => el.child(div().pt(2).text_size(11).font_weight(700).text_color("#2a62c9").child(`${m.replies} ${m.replies === 1 ? "reply" : "replies"} ›`))),
       );
   }

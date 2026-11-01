@@ -540,7 +540,8 @@ export default class Notes {
       .when(this.text !== null, (el) =>
         el.child(
           TextView.markdown(`n-md-${this.note}`, this.md ?? "")
-            .selectable(true)
+            // Not selectable: the theme's selection color is the terminal's (dark gray in
+            // Pro), which reads as black bars on this white page. Edit (⌘E) to copy text.
             .scrollable(true)
             .on_link_click((url, cx) => this.link(url, cx)),
         ),
