@@ -1,9 +1,10 @@
 # Snow Leopard
 
 Herdr as Mac OS X 10.6: a translucent menu bar over the Aurora wallpaper,
-one Aqua window with a unified title bar and toolbar, Finder's source list
-of spaces and agents, Terminal.app's tab bar and split panes, a Finder
-status bar, and Leopard's glass Dock, where each space is a folder. Every
+Aqua windows you can move, resize and tear tabs off into, Finder's source
+list of spaces and agents, Terminal.app's tab bar and split panes, and
+Leopard's glass Dock, where each space is a folder and apps like Obsidian
+and Slack open inside Herdr: your vault as notes, Slack as a tab. Every
 menu, button and Dock icon runs a real Herdr command.
 
 ![Snow Leopard](preview.png)
