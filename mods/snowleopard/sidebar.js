@@ -3,7 +3,9 @@
 // most urgent agent's mark; AGENTS below with the spinner, a red badge
 // when one needs you and Mail's blue dot when one finished. Selected rows
 // get the blue gradient (graphite when the window isn't key). The bottom
-// bar holds + (new space) and the action gear.
+// bar holds + (new space) and the action gear. A space's disclosure triangle
+// lists its tabs under it (the shown space's are open); hovering a tab or an
+// agent shows a close button, which asks before closing its tab.
 
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
@@ -11,7 +13,7 @@ import { spaces, agents, machines, panes, run, setAgentOrder } from "herdr";
 import {
   C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, pill, statusMark, programIcon, openMenu,
   closeMenus, textured, menuSize, spaceItems,
-  torn, raiseTorn,
+  torn, raiseTorn, tabClose, leadProgram, openSheet, shortcut,
 } from "./kit.js";
 
 const ROW = 22;
@@ -21,6 +23,9 @@ export default class Sidebar {
     this.size = null;
     this.fold = {};
     this.hot = null;
+    this.open = {}; // space id → its tabs shown (default: the shown space)
+    this.hoverRow = null;
+    this.hotClose = false;
   }
 
   heading(id, label) {
@@ -65,6 +70,24 @@ export default class Sidebar {
           .child(paint(rrect(w, ROW, 0), live ? vgrad(C.rowTop, C.rowBot) : vgrad(C.rowTopOff, C.rowBotOff), w, ROW))
           .child(div().absolute().top(0).left(0).w_full().h(1).bg(live ? C.rowLine : C.rowLineOff)),
       )
+      .when(o.disclose !== undefined, (el) =>
+        el.child(
+          div()
+            .id(`${id}-dis`)
+            .relative()
+            .flex_none()
+            .w(10)
+            .ml(-12)
+            .text_size(9)
+            .text_color(sel ? "#ffffff" : "#6a7380")
+            .child(o.disclose === null ? "" : o.disclose ? "▼" : "▶")
+            .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+            .on_click((_e, cx) => {
+              if (o.disclose !== null) o.onDisclose?.();
+              cx.notify();
+            }),
+        ),
+      )
       .child(div().relative().flex_none().child(o.icon))
       .child(
         div()
@@ -77,7 +100,33 @@ export default class Sidebar {
           .when(sel, (el) => el.font_weight(700))
           .child(o.label),
       )
-      .when(Boolean(o.mark), (el) => el.child(div().relative().flex_none().child(o.mark)))
+      .when(Boolean(o.mark) && !(o.onClose && this.hoverRow === id), (el) => el.child(div().relative().flex_none().child(o.mark)))
+      .when(Boolean(o.onClose) && this.hoverRow === id, (el) =>
+        el.child(
+          div()
+            .id(`${id}-x`)
+            .relative()
+            .flex_none()
+            .child(tabClose(13, this.hotClose))
+            .tooltip("Close Tab…")
+            .on_hover((h, cx) => {
+              this.hotClose = h;
+              cx.notify();
+            })
+            .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+            .on_click((_e, cx) => {
+              cx.stop_propagation();
+              o.onClose();
+            }),
+        ),
+      )
+      .when(Boolean(o.onClose), (el) =>
+        el.on_hover((h, cx) => {
+          this.hoverRow = h ? id : this.hoverRow === id ? null : this.hoverRow;
+          if (!h) this.hotClose = false;
+          cx.notify();
+        }),
+      )
       .on_click((e, cx) => o.onClick?.(e, cx))
       .when(Boolean(o.onRight), (el) =>
         el.on_mouse_down("right", (e, cx) => {
@@ -115,9 +164,14 @@ export default class Sidebar {
       for (const s of g.list) {
         const urgent = s.status === "blocked" || s.status === "done" || s.status === "working";
         const tabs = s.tabs.filter((t) => !t.settled).length;
+        const out = torn();
+        const list = s.tabs.filter((t) => !t.settled || out[t.id]);
+        const open = this.open[s.id] ?? s.active;
         sections.push(
           this.row(`sp-${s.id}`, {
-            selected: s.active,
+            disclose: list.length ? open : null,
+            onDisclose: () => (this.open[s.id] = !open),
+            selected: s.active && !open,
             icon: image(s.machine ? ICON.folderNet : ICON.folder).w(16).h(16),
             label: s.name,
             mark: urgent ? statusMark(s.status, { selected: s.active }) : tabs > 1 ? pill(tabs, { selected: s.active }) : null,
@@ -125,6 +179,36 @@ export default class Sidebar {
             onRight: (e) => this.spaceMenu(s, e),
           }),
         );
+        if (open)
+          for (const t of list) {
+            const named = t.named ? t.name : leadProgram(s.id, t.id)?.name ?? `Tab ${t.name}`;
+            sections.push(
+              this.row(`tb-${t.id}`, {
+                indent: 36,
+                selected: s.active && t.active && !out[t.id],
+                icon: programIcon(leadProgram(s.id, t.id), 14, { small: true }),
+                label: out[t.id] ? `${named} (window)` : named,
+                mark: t.status ? statusMark(t.status, { selected: s.active && t.active }) : null,
+                onClick: () => {
+                  if (out[t.id]) return raiseTorn(t.id);
+                  run("space.select", { id: s.id });
+                  run("tab.select", { id: t.id });
+                },
+                onClose: () => openSheet("closetab", { tab: t.id }),
+                onRight: (e) => {
+                  closeMenus();
+                  openMenu(
+                    [
+                      { label: "Rename Tab…", act: { sheet: ["rename", { what: "tab", id: t.id }] } },
+                      { label: "Close Tab…", shortcut: shortcut("tab.close"), act: { sheet: ["closetab", { tab: t.id }] } },
+                    ],
+                    { x: e.position.x, y: e.position.y },
+                    { owner: `tb-${t.id}` },
+                  );
+                },
+              }),
+            );
+          }
       }
     }
     if (ags.length) {
@@ -142,6 +226,10 @@ export default class Sidebar {
                 const t = panes().find((x) => x.terminal === a.address)?.tab;
                 if (t && torn()[t]) raiseTorn(t);
                 else run("agent.focus", { terminal: a.address });
+              },
+              onClose: () => {
+                const t = panes().find((x) => x.terminal === a.address)?.tab ?? a.tab;
+                if (t) openSheet("closetab", { tab: t });
               },
             }).tooltip(`${a.program?.name ?? "Agent"} in ${a.space_name} — ${a.title || a.address}`),
           );

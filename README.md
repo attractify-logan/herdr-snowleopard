@@ -45,6 +45,7 @@ and Dock icon runs a real Herdr command.
   beside Herdr, with a light under the running ones. Right-click one to open
   the shown space's folder in it.
 - **Source list.** Spaces are grouped by machine, with your agents below. A
+  space's triangle lists its tabs; hover a tab or an agent for a close button. A
   spinner means working, a red badge means it needs you, and a blue dot means
   done.
 - **Tabs and panes.** The tab bar works like Terminal.app's, with ⌘ numbers.

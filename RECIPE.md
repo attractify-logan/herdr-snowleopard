@@ -109,7 +109,12 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   bring forward. Clicking a torn-off agent in the sidebar raises its window.
   The space's last tab stays in the main window. Torn-off windows survive
   restarts. Every window looks key while Herdr is in front (see Watch out).
-- **Sidebar**: click a space or agent to go to it; right-click a space (or use
+- **Sidebar**: a space's disclosure triangle (▶/▼, open for the shown
+  space) lists its tabs under it, indented 36 px with their program icon and
+  status (torn-off ones marked "(window)"; clicking raises the window). Hovering
+  a tab or agent row swaps its status for the tab bar's gray close disc, which
+  opens the Close Tab alert; right-click a tab row for Rename and Close.
+  Click a space or agent to go to it; right-click a space (or use
   the bottom gear) for its tabs, Open, New Tab Here, Rename…, Show in Finder
   and Close Space…. Click a heading to fold it.
 - **Tabs**: click to select, double-click the strip for a new tab, right-click
