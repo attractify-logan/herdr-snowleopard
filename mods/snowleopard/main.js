@@ -42,6 +42,7 @@ const ROLES = { menubar: MenuBar, titlebar: TitleBar, sidebar: Sidebar, tabs: Ta
 // Key commands ("snowleopard.<command>" in keys.json), taken by the menu bar's copy.
 const COMMANDS = {
   about: () => openSheet("about"),
+  prefs: () => openSheet("prefs", { key: "sl-prefs" }),
   forcequit: () => openSheet("forcequit"),
   fullscreen: () => window.toggle_fullscreen(),
   tearoff: () => {

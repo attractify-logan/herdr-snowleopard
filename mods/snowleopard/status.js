@@ -71,7 +71,7 @@ export default class StatusBar {
                 .cursor_pointer()
                 .when(this.hot, (d) => d.underline())
                 .child(embossed(linkText, { size: 11, bold: link === "blocked", color: linkColor }))
-                .tooltip(target ? `Go to “${agentName(target)}” in ${agentSpace(target)}` : "")
+                .when(Boolean(target), (d) => d.tooltip(`Go to “${agentName(target)}” in ${agentSpace(target)}`))
                 .on_hover((h, cx) => {
                   this.hot = h;
                   cx.notify();
