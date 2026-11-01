@@ -92,9 +92,13 @@ The layout needs macOS for Lucida Grande and the Apple menu glyph.
 
 `claude-code/` has matching Claude Code themes: **Snow Leopard** (dark, for
 the Pro profile) and **Snow Leopard Basic** (light). Copy one into
-`~/.claude/themes/` and pick it with `/theme`. `snowleopard-context.py` is a
-status line with an Aqua context gauge, which the layout also shows beside
-each agent. See
+`~/.claude/themes/` and pick it with `/theme`. The `snowleopard-context`
+mod draws an Aqua context gauge on Claude Code's footer, and
+`snowleopard-context.py` shows the same gauge beside each agent in the layout:
+
+```
+/plugin install snowleopard-context --marketplace attractify-logan/herdr-snowleopard
+``` See
 [claude-code/README.md](claude-code/README.md).
 
 ## Layout

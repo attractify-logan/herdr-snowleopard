@@ -1,0 +1,11 @@
+{
+  "name": "herdr-snowleopard",
+  "owner": { "name": "Logan Guthrie" },
+  "plugins": [
+    {
+      "name": "snowleopard-context",
+      "source": "./claude-code/snowleopard-context",
+      "description": "Snow Leopard context gauge on Claude Code's footer: an Aqua bar, blue, amber from 70%, red from 85%"
+    }
+  ]
+}

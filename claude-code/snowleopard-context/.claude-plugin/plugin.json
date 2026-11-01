@@ -1,0 +1,11 @@
+{
+  "name": "snowleopard-context",
+  "version": "0.1.0",
+  "description": "Snow Leopard context gauge on the footer's mode line: an Aqua bar, blue, amber from 70%, red from 85%",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Logan Guthrie"
+  },
+  "repository": "https://github.com/attractify-logan/herdr-snowleopard",
+  "license": "MIT"
+}

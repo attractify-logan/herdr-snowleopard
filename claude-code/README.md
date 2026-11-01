@@ -13,33 +13,40 @@ or set `"theme": "custom:snowleopard"` in `~/.claude/settings.json`.
 
 ## Context gauge
 
-`snowleopard-context.py` is a status line for Claude Code that shows how full
-the context window is as an Aqua progress bar: blue, amber from 70%, red from
-85%.
+How full the context window is, as an Aqua progress bar on Claude Code's
+footer, beside the permission mode: blue, amber from 70%, red from 85%.
 
 ```
-◖████████▎       ◗ 52% context
+━━━━━━━━━━━━ 68% context
 ```
 
-Install it (Python 3, no packages):
+It's the `snowleopard-context` mod (Claude Code 2.1.287 or later). Install it
+in Claude Code:
 
-```sh
-cp snowleopard-context.py ~/.claude/
+```
+/plugin install snowleopard-context --marketplace attractify-logan/herdr-snowleopard
 ```
 
-and in `~/.claude/settings.json`:
+Answer `y` to add the marketplace, then pick a scope (user, for every project).
+
+### In the Snow Leopard Herdr layout
+
+`snowleopard-context.py` is a status line that reports the same figure to
+Herdr (it labels the terminal `sl.context`), and the layout draws a gauge
+beside each agent in the sidebar and in a split pane's title strip. Copy it to
+`~/.claude/` and add to `~/.claude/settings.json`:
 
 ```json
-"statusLine": { "type": "command", "command": "python3 ~/.claude/snowleopard-context.py" }
+"statusLine": { "type": "command", "command": "python3 ~/.claude/snowleopard-context.py --no-gauge" }
 ```
 
-To keep a status line you already have, run it first with `--then`: the
-gauge follows its output.
+`--no-gauge` leaves the drawing to the mod. To keep a status line you already
+have, run it first with `--then`, and its output is what the status line
+shows:
 
 ```json
-"statusLine": { "type": "command", "command": "python3 ~/.claude/snowleopard-context.py --then 'my-statusline'" }
+"statusLine": { "type": "command", "command": "python3 ~/.claude/snowleopard-context.py --no-gauge --then 'my-statusline'" }
 ```
 
-Inside a Herdr terminal it also labels the terminal (`sl.context`), and the
-Snow Leopard layout draws the same gauge beside the agent in the sidebar and
-in a split pane's title strip.
+Without the mod, leave out `--no-gauge` and the status line draws the gauge
+itself: `◖████████▎       ◗ 52% context`.

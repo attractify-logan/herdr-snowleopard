@@ -8,7 +8,9 @@ Aqua-style capsule gauge of the context window in use:
 
 blue like Aqua's progress bars, amber from 70%, red from 85%. With --then
 "<command>", that status line command runs first (on the same JSON) and the
-gauge follows it, so an existing status line keeps working.
+gauge follows it, so an existing status line keeps working. With --no-gauge it
+prints only that command's output (the snowleopard-context mod draws the gauge
+on the footer's mode line instead) and still labels the terminal.
 
 Inside a Herdr terminal it also labels the terminal `sl.context=<percent>`
 (with `hc label`), which the Snow Leopard layout draws as a gauge in the
@@ -92,10 +94,13 @@ def main():
         status = json.loads(raw)
     except ValueError:
         status = {}
+    args = sys.argv[1:]
+    quiet = "--no-gauge" in args
+    args = [a for a in args if a != "--no-gauge"]
     before = ""
-    if len(sys.argv) > 2 and sys.argv[1] == "--then":
+    if len(args) > 1 and args[0] == "--then":
         try:
-            r = subprocess.run(sys.argv[2], shell=True, input=raw, capture_output=True, text=True, timeout=10)
+            r = subprocess.run(args[1], shell=True, input=raw, capture_output=True, text=True, timeout=10)
             before = r.stdout.rstrip("\n")
         except (OSError, subprocess.SubprocessError):
             before = ""
@@ -104,6 +109,9 @@ def main():
         print(before)
         return
     label_terminal(pct)
+    if quiet:
+        print(before)
+        return
     print(before + ("  " if before else "") + gauge(pct))
 
 
