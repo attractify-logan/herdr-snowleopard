@@ -88,11 +88,13 @@ herdr-app do layout.switch --name snowleopard
 
 The layout needs macOS for Lucida Grande and the Apple menu glyph.
 
-## Claude Code theme
+## Claude Code theme and context gauge
 
 `claude-code/` has matching Claude Code themes: **Snow Leopard** (dark, for
 the Pro profile) and **Snow Leopard Basic** (light). Copy one into
-`~/.claude/themes/` and pick it with `/theme`. See
+`~/.claude/themes/` and pick it with `/theme`. `snowleopard-context.py` is a
+status line with an Aqua context gauge, which the layout also shows beside
+each agent. See
 [claude-code/README.md](claude-code/README.md).
 
 ## Layout

@@ -13,7 +13,7 @@ import { spaces, agents, machines, panes, run, setAgentOrder } from "herdr";
 import {
   C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, pill, statusMark, programIcon, openMenu,
   closeMenus, textured, menuSize, spaceItems,
-  torn, raiseTorn, tabClose, leadProgram, openSheet, shortcut,
+  torn, raiseTorn, tabClose, leadProgram, openSheet, shortcut, contextLevels, gauge,
 } from "./kit.js";
 
 const ROW = 22;
@@ -148,6 +148,7 @@ export default class Sidebar {
     const live = key();
     const all = spaces();
     const ags = agents();
+    const ctx = contextLevels();
     setAgentOrder(ags.map((a) => a.address));
     const groups = [];
     for (const m of machines()) {
@@ -230,7 +231,9 @@ export default class Sidebar {
               selected: a.focused,
               icon: programIcon(a.program, 16, { small: true }),
               label: name,
-              mark: statusMark(a.status, { selected: a.focused }),
+              mark: ctx.has(a.address)
+                ? h_flex().gap(5).items_center().child(gauge(ctx.get(a.address), 30, 7, { selected: a.focused })).child(statusMark(a.status, { selected: a.focused }))
+                : statusMark(a.status, { selected: a.focused }),
               onClick: () => {
                 const t = panes().find((x) => x.terminal === a.address)?.tab;
                 if (t && torn()[t]) raiseTorn(t);
@@ -240,7 +243,7 @@ export default class Sidebar {
                 const t = panes().find((x) => x.terminal === a.address)?.tab ?? a.tab;
                 if (t) openSheet("closetab", { tab: t });
               },
-            }).tooltip(`${a.program?.name ?? "Agent"} in ${a.space_name} — ${a.title || a.address}`),
+            }).tooltip(`${a.program?.name ?? "Agent"} in ${a.space_name} — ${a.title || a.address}${ctx.has(a.address) ? ` · context ${Math.round(ctx.get(a.address))}% full` : ""}`),
           );
         }
     }

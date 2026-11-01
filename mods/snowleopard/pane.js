@@ -5,7 +5,7 @@
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { panes, props, run, home } from "herdr";
-import { C, FONT, GLYPH, key, fillGrad, embossed, bead, statusMark, base } from "./kit.js";
+import { C, FONT, GLYPH, key, fillGrad, embossed, bead, statusMark, base, contextLevels, gauge } from "./kit.js";
 
 export function paneTitle(p) {
   if (!p) return "";
@@ -73,6 +73,10 @@ export default class PaneHeader {
           .justify_center()
           .child(embossed(paneTitle(p), { size: 11, color: on ? "#1a1a1a" : "#6a6a6a", truncate: true })),
       )
+      .when(Boolean(p?.terminal) && contextLevels().has(p.terminal), (el) => {
+        const pct = contextLevels().get(p.terminal) ?? 0;
+        return el.child(div().id(`ph-ctx-${id}`).relative().flex_none().child(gauge(pct, 40, 8)).tooltip(`Context ${Math.round(pct)}% full`));
+      })
       .child(div().relative().flex_none().w(23).flex().justify_end().child(statusMark(p?.status)))
       .on_click((e) => {
         if (e.click_count >= 2) run("pane.zoom", { pane: id });

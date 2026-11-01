@@ -113,6 +113,13 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   <machine>" for each reachable machine (`space.new {machine}`), and the
   sidebar shows every machine's heading, with a New Space… row when it has no
   spaces left.
+- **Context gauges**: with `claude-code/snowleopard-context.py` as Claude
+  Code's status line, each session labels its terminal `sl.context=<percent>`
+  (`hc label`, only when it changes), and an Aqua progress bar (`gauge()`:
+  a recessed track, a glossy blue fill, amber from 70%, red from 85%) shows
+  beside the agent in the sidebar (30×7) and in the pane's title strip
+  (40×8). `contextLevels()` reads `terminals()` at most every 3 s: it hands
+  over every terminal, and calling it per row ran a redraw out of time.
 - **Sidebar**: a space's disclosure triangle (▶/▼, open for the shown
   space) lists its tabs under it, indented 36 px with their program icon and
   status (torn-off ones marked "(window)"; clicking raises the window). Hovering

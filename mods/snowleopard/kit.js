@@ -9,7 +9,7 @@
 import { div, svg, image, PathBuilder, Background } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import {
-  keys, machines, openOverlay, closeOverlay, pickFolder, shared, setShared, run, exec, spaces, agents, panes, layout, appHome, home, readTextFile,
+  keys, machines, terminals, openOverlay, closeOverlay, pickFolder, shared, setShared, run, exec, spaces, agents, panes, layout, appHome, home, readTextFile,
   window as appWindow,
 } from "herdr";
 
@@ -262,6 +262,45 @@ export function tabClose(size, hot = false) {
         .items_center()
         .justify_center()
         .child(svg(GLYPH.close).w(s * 0.56).h(s * 0.56).text_color("#ffffff")),
+    );
+}
+
+/** How full each Claude Code session's context is: terminal address → percent,
+ *  from the `sl.context` label claude-code/snowleopard-context.py sets. */
+// terminals() hands over every terminal on every machine, so it's read at most
+// every 3 s and shared by every part that draws a gauge (redraws share a budget).
+let LEVELS = new Map();
+let LEVELS_AT = 0;
+
+export function contextLevels() {
+  const now = Date.now();
+  if (now - LEVELS_AT < 3000) return LEVELS;
+  LEVELS_AT = now;
+  const out = new Map();
+  for (const t of terminals() ?? []) {
+    const v = Number(t?.labels?.["sl.context"]);
+    if (t?.address && Number.isFinite(v)) out.set(t.address, v);
+  }
+  LEVELS = out;
+  return out;
+}
+
+/** An Aqua progress bar: a recessed gray track with a glossy fill, blue, amber
+ *  from 70% and red from 85%, as Claude Code's context gauge shows it. */
+export function gauge(pct, w = 34, h = 7, o = {}) {
+  const fill = Math.max(0, Math.min(w - 2, Math.round(((w - 2) * pct) / 100)));
+  const [top, bottom] = pct >= 85 ? ["#ff8a74", "#c41606"] : pct >= 70 ? ["#ffd27a", "#d98a06"] : ["#9cc4f6", "#2a64d8"];
+  return div()
+    .relative()
+    .flex_none()
+    .w(w)
+    .h(h)
+    .child(paint(rrect(w, h, h / 2), o.selected ? "#ffffff90" : "#7d7d7d", w, h))
+    .child(paint(rrect(w - 2, h - 2, (h - 2) / 2, 1, 1), vgrad("#b9b9b9", "#ececec"), w, h))
+    .when(fill > 1, (el) =>
+      el
+        .child(paint(rrect(Math.max(fill, h - 2), h - 2, (h - 2) / 2, 1, 1), vgrad(top, bottom), w, h))
+        .child(paint(rrect(Math.max(fill - 2, 1), Math.max(1, (h - 2) / 2 - 0.5), (h - 2) / 4, 2, 1.5), "#ffffff70", w, h)),
     );
 }
 
