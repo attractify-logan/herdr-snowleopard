@@ -32,7 +32,7 @@ import AquaWindow from "./aqua.js";
 import Notes from "./notes.js";
 import Slack from "./slack.js";
 import { spaces } from "herdr";
-import { openSheet, tearOff, mergeAll, torn, openWin } from "./kit.js";
+import { openSheet, tearOff, mergeAll, torn, openWin, openSlackTab } from "./kit.js";
 
 const ROLES = { menubar: MenuBar, titlebar: TitleBar, sidebar: Sidebar, tabs: Tabs, pane: PaneHeader, status: StatusBar, dock: Dock, menu: Menu, sheet: Sheet, desk: Desk, drag: Drag, aqua: AquaWindow, notes: Notes, slack: Slack };
 
@@ -48,6 +48,7 @@ const COMMANDS = {
   mergeall: () => mergeAll(),
   notes: () => openWin("notes"),
   slack: () => openWin("slack"),
+  slacktab: () => openSlackTab(),
   // F2 and ⇧F2 in this layout: the Aqua rename sheet instead of Herdr's prompt.
   renametab: () => {
     const t = spaces().find((s) => s.active)?.tabs.find((t) => t.active);

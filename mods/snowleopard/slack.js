@@ -1,5 +1,6 @@
-// Slack in an Aqua window (props.role "slack"; an app window, see kit.js),
-// opened from Slack's Dock icon. A source list of your channels and direct
+// Slack, opened from Slack's Dock icon: as a tab in the main window (props
+// inTab; the default, since floating windows always stay above the main one),
+// or in its own Aqua window (an app window, see kit.js). A source list of your channels and direct
 // messages, the open conversation's messages (Slack's mrkdwn as Markdown,
 // names for user ids, threads collapsed to "N replies": click one to read it
 // beside), and a field to send. It polls: the open conversation every 5 s,
@@ -17,7 +18,7 @@ import { h_flex, v_flex, InputState, Input, TextView, v_virtual_list, VirtualLis
 import { props, exec, closeOverlay } from "herdr";
 import {
   C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, aquaButton, closeMenus, winState, setWin,
-  closeWin, zoomWin, startTornResize, dockApps, appIcon, appName,
+  closeWin, zoomWin, startTornResize, dockApps, appIcon, appName, openWin,
 } from "./kit.js";
 
 const TITLE = 22;
@@ -654,10 +655,48 @@ export default class Slack {
       );
   }
 
+  /** As a tab: a toolbar strip over the body, no window chrome of its own. */
+  inTab(body, live) {
+    const app = dockApps().find((a) => appName(a.path) === "Slack");
+    const strip = h_flex()
+      .id("sl-strip")
+      .relative()
+      .flex_none()
+      .w_full()
+      .h(TOOLBAR)
+      .px(8)
+      .gap(10)
+      .items_center()
+      .child(fillGrad(live ? C.titleTop : C.titleTopOff, live ? C.titleBot : C.titleBotOff))
+      .child(div().absolute().bottom(0).left(0).w_full().h(1).bg(live ? C.titleLine : C.titleLineOff))
+      .when(Boolean(this.thread), (el) =>
+        el.child(textured([{ id: "sl-back", glyph: GLYPH.left, size: 12, w: 30, tooltip: "Back to the conversation", onClick: (_e, cx) => ((this.thread = KEEP.thread = null), cx.notify()) }])),
+      )
+      .when(Boolean(this.token), (el) => el.child(textured([{ id: "sl-refresh", text: "Refresh", w: 66, tooltip: "Fetch new messages now", onClick: (_e, cx) => this.poll(cx) }])))
+      .child(div().flex_1())
+      .child(embossed(this.me?.team ?? "Slack", { size: 12, color: live ? "#000000" : "#4d4d4d" }))
+      .child(div().flex_1())
+      .child(textured([{ id: "sl-float", text: "Open in Window", w: 112, tooltip: "Move Slack to its own window", onClick: () => openWin("slack") }]))
+      .when(Boolean(app), (el) => el.child(textured([{ id: "sl-app", text: "Slack", w: 56, tooltip: "Open the Slack app", onClick: () => exec("open", ["-a", app.path]).catch(() => {}) }])))
+      .when(Boolean(this.token), (el) => el.child(textured([{ id: "sl-out", text: "Sign Out", w: 70, tooltip: "Forget the Slack token (it's removed from the Keychain)", onClick: (_e, cx) => cx.spawn((cx) => this.signOut(cx)) }])));
+    return v_flex()
+      .id("root")
+      .on_size_change((size, cx) => {
+        this.size = size;
+        cx.notify();
+      })
+      .size_full()
+      .bg("#ededed")
+      .font_family(FONT)
+      .text_color(C.text)
+      .child(strip)
+      .child(h_flex().flex_1().min_h(0).w_full().child(body));
+  }
+
   render(_cx) {
     const p = props() ?? {};
     // Closed from elsewhere (sl.slack open: false): close, as torn-off windows do.
-    if (winState("slack").open === false && !this.closing) {
+    if (!p.inTab && winState("slack").open === false && !this.closing) {
       this.closing = true;
       closeOverlay(p.overlay);
     }
@@ -675,6 +714,7 @@ export default class Slack {
             .child(this.sidebar(live))
             .child(div().flex_none().w(1).h_full().bg("#8b8b8b"))
             .child(v_flex().flex_1().min_w(0).h_full().child(this.feed()).child(this.composer(live)));
+    if (p.inTab) return this.inTab(body, live);
     return div()
       .id("root")
       .on_size_change((size, cx) => {

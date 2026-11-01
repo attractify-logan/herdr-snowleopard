@@ -35,8 +35,8 @@ and Dock icon runs a real Herdr command.
   matches names and text. Edit (⌘E) changes the note; ⌘S or Done saves it, and
   a note changed on disk in the meantime is never overwritten. Obsidian itself
   stays one right-click away.
-- **Slack (beta).** With Slack in the Dock, its icon opens Slack in an Aqua
-  window inside Herdr: channels and DMs, messages with names and threads, and a
+- **Slack (beta).** With Slack in the Dock, its icon opens Slack as a tab in
+  the main window (or, from its right-click menu, in its own Aqua window): channels and DMs, messages with names and threads, and a
   field to send. It uses a small Slack app of your own (the window's setup
   panel creates it) and keeps the token in your Keychain. It polls every 5 s,
   so there are no notifications, huddles or file uploads.

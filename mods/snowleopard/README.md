@@ -30,7 +30,7 @@ and the window opens where it's released.
 
 Keys (`keys.json`, section `layout:snowleopard`): `ctrl-f2` walks the menu
 bar menus, `cmd-alt-escape` Force Quit, `cmd-m` minimize, `ctrl-cmd-f` full screen. Mod commands:
-`snowleopard.<apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes|slack>`.
+`snowleopard.<apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes|slack|slacktab>`.
 
 View > Terminal Profile switches Basic, Pro, Homebrew, Ocean and Novel.
 `art/aurora.py` regenerates the wallpaper (numpy + Pillow).

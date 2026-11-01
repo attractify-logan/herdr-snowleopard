@@ -127,7 +127,13 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   it, yellow minimizes it beside the Trash, green zooms it. It opens on the
   note read last, else the one changed last. Its Dock menu: Open Vault in
   Herdr, Open Obsidian App.
-- **Slack**: Slack's Dock icon opens an app window (`slack.js`, 900×600):
+- **Slack**: Slack's Dock icon opens Slack as a tab named Slack in the shown
+  space (`tab.new {name, mod: "snowleopard", props: {role: "slack", inTab:
+  true}}`; clicking again goes to that tab), drawn with a toolbar strip
+  (Refresh, the workspace name, Open in Window, Slack, Sign Out) instead of
+  window chrome. A tab, unlike a floating window, goes behind the rest when
+  another tab is shown. Its Dock menu also opens it in an app window
+  (`slack.js`, 900×600):
   conversations from `users.conversations` in a 220 px source list (virtual
   list), the open one's last 60 messages from `conversations.history` in a
   measured `list` (Slack mrkdwn turned into Markdown once on arrival: user,
@@ -211,7 +217,7 @@ Ocean and Novel, using Terminal.app's ANSI palette.
 - Optional keys (`keys.json`, section `layout:snowleopard`):
   `"ctrl-f2": "snowleopard.menus"`, `"cmd-alt-escape": "snowleopard.forcequit"`,
   `"cmd-m": "window.minimize"`, `"ctrl-cmd-f": "snowleopard.fullscreen"`,
-  `"f2": "snowleopard.renametab"`, `"shift-f2": "snowleopard.renamespace"`. Mod commands: `snowleopard.apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes|slack|renametab|renamespace`.
+  `"f2": "snowleopard.renametab"`, `"shift-f2": "snowleopard.renamespace"`. Mod commands: `snowleopard.apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes|slack|slacktab|renametab|renamespace`.
 
 ## Watch out
 

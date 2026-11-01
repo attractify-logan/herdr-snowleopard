@@ -607,6 +607,7 @@ export function perform(act) {
   if (act.reveal) exec("open", ["-R", act.reveal]).catch(() => {});
   if (act.unDock) removeDockApp(act.unDock);
   if (act.win) openWin(act.win);
+  if (act.slackTab) openSlackTab();
   if (act.mergeAll) mergeAll();
   if (act.newSpaceIn)
     pickFolder({ prompt: "New Space" })
@@ -1013,6 +1014,25 @@ export function zoomWin(name, overlay, extra = {}) {
   const big = !winState(name).big;
   closeOverlay(overlay);
   openWin(name, { big, ...extra });
+}
+
+/** The tab showing Slack (a snowleopard mod pane in a tab named Slack), if any. */
+export function slackTab() {
+  for (const s of spaces())
+    for (const t of s.tabs)
+      if (t.name === "Slack" && panes().some((p) => p.tab === t.id && p.mod === "snowleopard")) return { space: s, tab: t };
+  return null;
+}
+
+/** Slack as a tab in the main window: goes to it, or makes one in the shown space. */
+export function openSlackTab() {
+  const at = slackTab();
+  if (at) {
+    run("space.select", { id: at.space.id });
+    run("tab.select", { id: at.tab.id });
+    return;
+  }
+  run("tab.new", { name: "Slack", mod: "snowleopard", props: { role: "slack", inTab: true } });
 }
 
 /** A new frame from the grip: reopened in place at the new size. */

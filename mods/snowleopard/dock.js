@@ -18,7 +18,7 @@ import { h_flex } from "gpui-base";
 import { spaces, agents, run, shared, exec } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, oval, vgrad, programIcon, leadProgram, countBadge, openMenu, closeMenus, menuSize,
-  spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, openWin, winState, WIN_APPS,
+  spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, openWin, winState, WIN_APPS, openSlackTab,
 } from "./kit.js";
 
 const ICON_SIZE = 48;
@@ -67,7 +67,9 @@ export default class Dock {
     const here = s && !s.machine && s.folder;
     const win = WIN_APPS[appName(it.app.path)];
     return [
-      ...(win
+      ...(win === "slack"
+        ? [{ label: "Open Slack in a Tab", act: { slackTab: true } }, { label: "Open Slack in a Window", act: { win } }, { label: "Open Slack App", act: { launch: [it.app.path] } }]
+        : win
         ? [{ label: win === "notes" ? "Open Vault in Herdr" : `Open ${it.label} in Herdr`, act: { win } }, { label: `Open ${it.label} App`, act: { launch: [it.app.path] } }]
         : [{ label: "Open", act: { launch: [it.app.path] } }]),
       ...(here ? [{ label: `Open “${s.name}” in ${it.label}`, act: { launch: [it.app.path, s.folder] } }] : []),
@@ -223,7 +225,9 @@ export default class Dock {
     if (it.kind === "win") restoreTorn(it.tab);
     if (it.kind === "dapp") {
       const win = WIN_APPS[appName(it.app.path)];
-      if (win) openWin(win);
+      // Slack goes in a tab, which the main window can cover; its menu offers a window.
+      if (win === "slack" && !winState("slack").open) openSlackTab();
+      else if (win) openWin(win);
       else exec("open", ["-a", it.app.path]).catch(() => {});
     }
     if (it.kind === "winmin") openWin(it.win);
