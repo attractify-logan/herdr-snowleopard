@@ -9,7 +9,7 @@
 import { div, svg, image, PathBuilder, Background } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import {
-  keys, openOverlay, closeOverlay, pickFolder, shared, setShared, run, exec, spaces, agents, panes, layout, appHome, home, readTextFile,
+  keys, machines, openOverlay, closeOverlay, pickFolder, shared, setShared, run, exec, spaces, agents, panes, layout, appHome, home, readTextFile,
   window as appWindow,
 } from "herdr";
 
@@ -641,6 +641,13 @@ export function spaceItems(s) {
     { sep: true },
     { label: "Close Space…", act: { sheet: ["closespace", { space: s.id }] } },
   ];
+}
+
+/** "New Space on <machine>" for each other machine Herdr can reach. */
+export function remoteSpaceItems() {
+  return machines()
+    .filter((m) => m.name && m.layout !== "unavailable")
+    .map((m) => ({ label: `New Space on ${m.name}`, act: { run: ["space.new", { machine: m.name }] } }));
 }
 
 // ---- the window on the desktop

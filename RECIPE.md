@@ -109,6 +109,10 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   bring forward. Clicking a torn-off agent in the sidebar raises its window.
   The space's last tab stays in the main window. Torn-off windows survive
   restarts. Every window looks key while Herdr is in front (see Watch out).
+- **Other machines**: File and the toolbar's New ▾ list "New Space on
+  <machine>" for each reachable machine (`space.new {machine}`), and the
+  sidebar shows every machine's heading, with a New Space… row when it has no
+  spaces left.
 - **Sidebar**: a space's disclosure triangle (▶/▼, open for the shown
   space) lists its tabs under it, indented 36 px with their program icon and
   status (torn-off ones marked "(window)"; clicking raises the window). Hovering

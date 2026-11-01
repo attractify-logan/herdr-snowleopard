@@ -10,7 +10,7 @@ import {
   window as appWindow,
 } from "herdr";
 import {
-  C, FONT, GLYPH, ICON, paint, rrect, vgrad, fillGrad, openMenu, closeMenus, shortcut, shown, plural, torn, tabInfo, canTear,
+  C, FONT, GLYPH, ICON, paint, rrect, vgrad, fillGrad, openMenu, closeMenus, shortcut, shown, plural, torn, tabInfo, canTear, remoteSpaceItems,
 } from "./kit.js";
 
 export const PROFILES = [
@@ -132,6 +132,7 @@ export default class MenuBar {
           { label: "New Tab", shortcut: sc("tab.new"), act: { run: ["tab.new", {}] } },
           { label: "New Space", shortcut: sc("space.new"), act: { run: ["space.new", {}] } },
           { label: "New Space in Folder…", act: { newSpaceIn: true } },
+          ...remoteSpaceItems(),
           ...(agentRows.length ? [{ sep: true }, { label: "New Tab with Agent", header: true }, ...agentRows] : []),
           { sep: true },
           { label: "Split Pane Right", shortcut: sc("pane.split:right"), act: { run: ["pane.split", { direction: "right" }] }, disabled: !focused()?.pane },

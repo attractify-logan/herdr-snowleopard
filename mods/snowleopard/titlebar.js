@@ -10,7 +10,7 @@ import { h_flex } from "gpui-base";
 import { spaces, focused, panes, run, knownAgents, shared, window as appWindow } from "herdr";
 import {
   C, GLYPH, ICON, key, paint, rrect, vgrad, embossed, bead, textured, openMenu, closeMenus, shortcut, shown,
-  startDrag, toggleZoom, reportSize,
+  startDrag, toggleZoom, reportSize, remoteSpaceItems,
 } from "./kit.js";
 
 const TITLE = 22;
@@ -64,6 +64,7 @@ export default class TitleBar {
       { label: "New Tab", shortcut: sc("tab.new"), act: { run: ["tab.new", {}] } },
       { label: "New Space", shortcut: sc("space.new"), act: { run: ["space.new", {}] } },
       { label: "New Space in Folder…", act: { newSpaceIn: true } },
+      ...remoteSpaceItems(),
       ...(rows.length ? [{ sep: true }, { label: "New Tab with Agent", header: true }, ...rows] : []),
     ];
   }

@@ -152,7 +152,8 @@ export default class Sidebar {
     const groups = [];
     for (const m of machines()) {
       const list = all.filter((s) => (s.machine ?? null) === (m.name ?? null));
-      if (list.length || m.name === null) groups.push({ name: m.name, list, state: m.layout });
+      // Every machine shows, so one with no spaces left still offers a new one.
+      groups.push({ name: m.name, list, state: m.layout });
     }
     const sections = [];
     for (const g of groups) {
@@ -161,6 +162,14 @@ export default class Sidebar {
       if (this.fold[id]) continue;
       if (g.state !== "ready" && !g.list.length)
         sections.push(h_flex().h(ROW).pl(18).text_size(11).italic().text_color(C.gray).child(g.state === "loading" ? "Connecting…" : "Unavailable"));
+      else if (!g.list.length && g.name)
+        sections.push(
+          this.row(`new-${g.name}`, {
+            icon: image(ICON.folderNet).w(16).h(16).opacity(0.55),
+            label: "New Space…",
+            onClick: () => run("space.new", { machine: g.name }),
+          }).tooltip(`Make a space on ${g.name}`),
+        );
       for (const s of g.list) {
         const urgent = s.status === "blocked" || s.status === "done" || s.status === "working";
         const tabs = s.tabs.filter((t) => !t.settled).length;
