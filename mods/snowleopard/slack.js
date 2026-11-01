@@ -14,7 +14,7 @@
 // they arrive, and both lists draw only what's on screen.
 
 import { div, svg, image, list } from "gpui-kit";
-import { h_flex, v_flex, InputState, Input, TextView, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
+import { h_flex, v_flex, InputState, Input, TextView, v_virtual_list, VirtualListScrollHandle, Scrollbar } from "gpui-base";
 import { props, exec, closeOverlay } from "herdr";
 import {
   C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, aquaButton, closeMenus, winState, setWin,
@@ -517,6 +517,7 @@ export default class Slack {
 
   feed() {
     const rows = this.rows();
+    const name = this.thread ? "sl-thread" : `sl-msgs-${this.cur}`;
     return v_flex()
       .id("sl-feed")
       .relative()
@@ -531,14 +532,16 @@ export default class Slack {
           .flex_1()
           .min_h(0)
           .child(
-            list(this.thread ? "sl-thread" : `sl-msgs-${this.cur}`, rows.length, (i) => rows[i].ts, (i) => this.message(rows[i], Boolean(this.thread)))
+            list(name, rows.length, (i) => rows[i].ts, (i) => this.message(rows[i], Boolean(this.thread)))
               .track_scroll(this.scroll)
               .size_full()
               .on_item_click((ts, cx) => {
                 const m = rows.find((r) => r.ts === ts);
                 if (!this.thread && m?.replies) this.openThread(ts, cx);
               }),
-          ),
+          )
+          // Always shown, so you can see where you are in a long conversation.
+          .child(Scrollbar.vertical(name).mode("always").absolute().inset_0()),
       )
       .when(!rows.length, (el) => el.child(div().absolute().top(16).left(0).w_full().flex().justify_center().text_size(12).text_color(C.gray).child(this.status || "Loading messages…")))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
