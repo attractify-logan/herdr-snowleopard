@@ -732,7 +732,7 @@ export function closeMenus() {
   setShared("sl.menu", null);
 }
 
-const SHEET = { about: [300, 340], forcequit: [440, 400], dockapps: [400, 480], rename: [420, 170], prefs: [420, 190] };
+const SHEET = { about: [300, 360], forcequit: [440, 400], dockapps: [400, 480], rename: [420, 170], prefs: [420, 280] };
 
 /** Opens a sheet (the sheet role): kind and its props. */
 export function openSheet(kind, p = {}) {

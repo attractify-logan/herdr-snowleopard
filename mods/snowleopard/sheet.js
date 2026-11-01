@@ -15,14 +15,13 @@ import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { props, closeOverlay, run, spaces, agents, panes, updates, home } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, vgrad, aquaButton, programIcon, plural, base, dockApps, addDockApp, removeDockApp, listApps, makeAppIcons,
-  appIcon, appName, pref, setPref,
+  appIcon, appName, pref, setPref, tabLabel, openSheet, bead, statusMark,
 } from "./kit.js";
 
 export default class Sheet {
   init(_p, cx) {
     this.size = null;
     this.pick = null;
-    this.asking = false;
     this.focus = cx.focus_handle();
     this.focus.focus();
     this.apps = null;
@@ -31,11 +30,20 @@ export default class Sheet {
       const s = spaces().find((x) => (p.what === "space" ? x.id === p.id : x.tabs.some((t) => t.id === p.id)));
       const t = s?.tabs.find((x) => x.id === p.id);
       const named = p.what === "space" ? s?.named : t?.named;
-      this.input = InputState.new({ value: named ? (p.what === "space" ? s.name : t.name) : "", placeholder: p.what === "space" ? s?.name ?? "" : `Tab ${t?.name ?? ""}` });
+      const start = named ? (p.what === "space" ? s.name : t.name) : "";
+      // The placeholder is drawn by rename() (Aqua's grey), not by the Input.
+      this.hint = p.what === "space" ? s?.name ?? "" : tabLabel(s?.id, t);
+      this.dontAsk = false;
+      this.input = InputState.new({ value: start });
       this.input.on("submit", () => this.doRename());
-      this.input.focus();
+      const focus = () => {
+        this.input.focus();
+        // Like Finder: the old name opens selected, so typing replaces it.
+        if (start) this.input.set_selected_range({ start: 0, end: start.length });
+      };
+      focus();
       // As Herdr's own picker does: the keyboard isn't always the field's on the first frame.
-      cx.timer.after(300, () => this.input.focus());
+      cx.timer.after(300, focus);
     }
     this.icons = new Set();
     if (props()?.kind === "dockapps")
@@ -53,6 +61,8 @@ export default class Sheet {
   }
 
   close() {
+    // "Don't ask again" holds whether OK or Cancel ends the sheet.
+    if (props()?.kind === "rename" && props().isNew && this.dontAsk) setPref("askTabName", false);
     closeOverlay(props()?.overlay);
   }
 
@@ -66,7 +76,7 @@ export default class Sheet {
       const ags = agents().filter((a) => a.tab === t.id).length;
       const last = s.tabs.length === 1;
       return {
-        title: `Do you want to close the tab “${t.name}”?`,
+        title: `Do you want to close the tab “${tabLabel(s.id, t)}”?`,
         detail: `${ags ? `${plural(ags, "agent")} and every terminal in it` : `Every terminal in it`} will be ended.${last ? ` It's the last tab, so the space “${s.name}” closes too.` : ""}`,
         yes: "Close",
         act: () => run("tab.close", { id: t.id, confirmed: true }),
@@ -157,9 +167,29 @@ export default class Sheet {
   about() {
     const u = updates();
     const ok = () => this.close();
-    const body = v_flex()
-      .size_full()
-      .pt(24)
+    const w = this.size?.width ?? props()?.size?.[0] ?? 0;
+    // A slim title strip with the red light, as 10.6's About panels have (only red is active).
+    const strip = div()
+      .relative()
+      .flex_none()
+      .w_full()
+      .h(22)
+      .child(w > 0 ? paint(rrect(w - 2, 22, 5, 1, 1), vgrad("#e8e8e8", "#c8c8c8"), w, 22) : div())
+      .child(div().absolute().bottom(0).left(1).right(1).h(1).bg("#a0a0a0"))
+      .child(
+        div()
+          .id("about-close")
+          .absolute()
+          .top(4)
+          .left(9)
+          .child(bead("close", 14, null))
+          .tooltip("Close")
+          .on_click(() => this.close()),
+      );
+    const content = v_flex()
+      .flex_1()
+      .w_full()
+      .pt(18)
       .pb(18)
       .px(24)
       .items_center()
@@ -183,7 +213,7 @@ export default class Sheet {
           }, { primary: Boolean(u?.app?.ready) })),
       )
       .child(div().pt(12).text_size(9).text_color(C.gray).child("Snow Leopard layout for Herdr"));
-    return this.frame(body, ok);
+    return this.frame(v_flex().size_full().child(strip).child(content), ok);
   }
 
   doRename() {
@@ -191,6 +221,24 @@ export default class Sheet {
     const name = this.input.value().trim();
     this.close();
     run(p.what === "space" ? "space.rename" : "tab.rename", { id: p.id, name });
+  }
+
+  // The space a tab is in (for the new-tab sheet's title).
+  spaceName(tabId) {
+    return spaces().find((x) => x.tabs.some((t) => t.id === tabId))?.name ?? "";
+  }
+
+  // An Aqua checkbox, 14 px.
+  checkbox(on, centered = false) {
+    return div()
+      .relative()
+      .flex_none()
+      .mt(centered ? 0 : 1)
+      .w(14)
+      .h(14)
+      .child(paint(rrect(14, 14, 3), on ? "#2a5db5" : "#8e8e8e", 14, 14))
+      .child(paint(rrect(12, 12, 2, 1, 1), on ? vgrad("#7fb2f2", "#2f6fd6") : vgrad("#ffffff", "#e3e3e3"), 14, 14))
+      .when(on, (el) => el.child(div().absolute().top(-2).left(2).text_size(12).font_weight(700).text_color("#ffffff").child("✓")));
   }
 
   rename(p) {
@@ -207,7 +255,7 @@ export default class Sheet {
           .flex_1()
           .min_w(0)
           .gap(8)
-          .child(div().text_size(13).font_weight(700).child(p.isNew ? "Name the New Tab" : p.what === "space" ? "Rename Space" : "Rename Tab"))
+          .child(div().text_size(13).font_weight(700).child(p.isNew ? `Name the new tab in “${this.spaceName(p.id)}”:` : p.what === "space" ? "Rename Space" : "Rename Tab"))
           .child(
             div()
               .relative()
@@ -216,45 +264,54 @@ export default class Sheet {
               .child(paint(rrect(w, h, 3), "#8e8e8e", w, h))
               .child(paint(rrect(w - 2, h - 2, 2, 1, 1), "#ffffff", w, h))
               .child(paint(rrect(w - 2, 2, 0, 1, 1), "#00000014", w, h))
+              // The name it will get, in Aqua's placeholder grey, while the field is empty.
+              .when(this.input.value() === "", (el) => el.child(div().absolute().top(0).left(6).h(h).flex().items_center().text_size(13).text_color("#a0a0a0").child(this.hint)))
               .child(h_flex().absolute().top(0).left(0).w(w).h(h).px(6).items_center().child(Input.new(this.input).flex_1().h(h).text_size(13).text_color("#000000"))),
           )
-          .child(div().text_size(11).text_color(C.gray).child(p.isNew ? "Leave it empty to call it by its number. Turn this off in Herdr › Snow Leopard Settings…" : p.what === "space" ? "Leave it empty to name the space after its folder again." : "Leave it empty to call the tab by its number again."))
+          .child(
+            p.isNew
+              ? h_flex()
+                  .id("rn-dont")
+                  .gap(6)
+                  .items_center()
+                  .child(this.checkbox(this.dontAsk, true))
+                  .child(div().text_size(11).child("Don't ask again"))
+                  .on_click((_e, cx) => {
+                    this.dontAsk = !this.dontAsk;
+                    cx.notify();
+                  })
+              : div().text_size(11).text_color(C.gray).child(p.what === "space" ? "Leave it empty to name the space after its folder again." : "Leave it empty to name the tab after its program again."),
+          )
           .child(div().flex_1())
-          .child(h_flex().justify_end().gap(12).child(aquaButton("rn-cancel", "Cancel", () => this.close())).child(aquaButton("rn-ok", "Rename", () => this.doRename(), { primary: true }))),
+          .child(h_flex().justify_end().gap(12).child(aquaButton("rn-cancel", "Cancel", () => this.close())).child(aquaButton("rn-ok", p.isNew ? "OK" : "Rename", () => this.doRename(), { primary: true }))),
       );
     return this.frame(body, () => this.doRename());
   }
 
   prefs() {
-    const box = (id, label, detail, on, flip) =>
-      h_flex()
+    const box = (id, label, detail, key) => {
+      const on = pref(key);
+      return h_flex()
         .id(id)
         .gap(8)
         .items_start()
-        .child(
-          div()
-            .relative()
-            .flex_none()
-            .mt(1)
-            .w(14)
-            .h(14)
-            .child(paint(rrect(14, 14, 3), on ? "#2a5db5" : "#8e8e8e", 14, 14))
-            .child(paint(rrect(12, 12, 2, 1, 1), on ? vgrad("#7fb2f2", "#2f6fd6") : vgrad("#ffffff", "#e3e3e3"), 14, 14))
-            .when(on, (el) => el.child(div().absolute().top(-2).left(2).text_size(12).font_weight(700).text_color("#ffffff").child("✓"))),
-        )
-        .child(v_flex().gap(2).child(div().text_size(12).child(label)).child(div().text_size(11).text_color(C.gray).child(detail)))
+        .child(this.checkbox(on))
+        .child(v_flex().gap(2).child(div().text_size(12).child(label)).when(Boolean(detail), (el) => el.child(div().text_size(11).text_color(C.gray).child(detail))))
         .on_click((_e, cx) => {
-          flip();
+          setPref(key, !on);
           cx.notify();
         });
+    };
     const done = () => this.close();
-    const ask = pref("askTabName");
     const body = v_flex()
       .size_full()
       .p(18)
       .gap(12)
       .child(div().text_size(13).font_weight(700).child("Snow Leopard Settings"))
-      .child(box("pf-ask", "Ask for a name when I make a new tab", "⌘T, the tab bar's +, and the New menus open the rename alert.", ask, () => setPref("askTabName", !ask)))
+      .child(box("pf-ask", "Ask for a name when I make a new tab", "Herdr asks for a name when you press ⌘T or +.", "askTabName"))
+      .child(box("pf-bounce", "Bounce a space in the Dock when an agent needs me", "", "bounce"))
+      .child(box("pf-notice", "Show a notice when an agent needs me", "", "notice"))
+      .child(box("pf-done-badge", "Count finished agents in Dock badges", "", "doneBadge"))
       .child(div().flex_1())
       .child(h_flex().justify_end().child(aquaButton("pf-done", "Done", done, { primary: true })));
     return this.frame(body, done);
@@ -319,21 +376,26 @@ export default class Sheet {
   forceQuit() {
     const list = panes().filter((p) => p.terminal);
     const all = spaces();
+    // "<tab> in <space>", " on <machine>" when remote, and the folder only if it isn't the space's name.
     const where = (p) => {
       const s = all.find((x) => x.tabs.some((t) => t.id === p.tab));
-      const t = s?.tabs.find((x) => x.id === p.tab);
-      return s ? `${s.name} › ${t?.name ?? ""}` : "";
+      if (!s) return "";
+      const t = s.tabs.find((x) => x.id === p.tab);
+      const dir = base(p.cwd, home());
+      return `${tabLabel(s.id, t)} in ${s.name}${s.machine ? ` on ${s.machine}` : ""}${dir && dir !== s.name ? ` · ${dir}` : ""}`;
     };
     const chosen = list.find((p) => p.terminal === this.pick);
     const name = (p) => (p.program && !p.program.shell ? p.program.name : p.program?.name ?? "shell");
+    // A real alert, as 10.6 asks it.
     const kill = () => {
       if (!chosen) return;
-      if (!this.asking) {
-        this.asking = true;
-        return;
-      }
       this.close();
-      run("terminal.kill", { terminal: chosen.terminal });
+      openSheet("confirm", {
+        title: `Do you want to force “${name(chosen)}” to quit?`,
+        detail: "You will lose any unsaved work in it.",
+        yes: "Force Quit",
+        command: { name: "terminal.kill", args: { terminal: chosen.terminal } },
+      });
     };
     const rows = list.map((p, i) => {
       const on = p.terminal === this.pick;
@@ -348,10 +410,10 @@ export default class Sheet {
         .text_color(on ? "#ffffff" : C.text)
         .child(programIcon(p.program, 18, { small: true }))
         .child(div().flex_none().text_size(12).child(name(p)))
-        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(on ? "#ffffffc0" : C.gray).child(`${where(p)} · ${base(p.cwd, home())}`))
+        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(on ? "#ffffffc0" : C.gray).child(where(p)))
+        .child(statusMark(p.status, { selected: on }))
         .on_click((_e, cx) => {
           this.pick = p.terminal;
-          this.asking = false;
           cx.notify();
         });
     });
@@ -372,7 +434,6 @@ export default class Sheet {
           .overflow_y_scroll()
           .children(rows),
       )
-      .when(this.asking && Boolean(chosen), (el) => el.child(div().text_size(11).font_weight(700).text_color("#9c1b10").child(`Force “${name(chosen)}” in ${where(chosen)} to quit? Click Force Quit again.`)))
       .child(
         h_flex()
           .justify_end()
