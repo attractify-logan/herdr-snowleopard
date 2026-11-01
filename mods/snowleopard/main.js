@@ -14,6 +14,7 @@
 //   aqua      a torn-off tab's window title bar (in an overlay window)
 //   notes     the Obsidian vault in an Aqua window (an overlay window)
 //   slack     Slack in an Aqua window (an overlay window)
+//   notice    a Growl-style "needs you" notice at the top right (an overlay window)
 
 import { View, div } from "gpui-kit";
 import { props, nextCommand } from "herdr";
@@ -31,11 +32,12 @@ import Drag from "./drag.js";
 import AquaWindow from "./aqua.js";
 import Notes from "./notes.js";
 import Slack from "./slack.js";
+import Notice from "./notice.js";
 import { spaces } from "herdr";
 import { openSheet, tearOff, mergeAll, torn, openWin, openSlackTab, setWin, winState, newTab, askCloseTab } from "./kit.js";
 import { lastNotified } from "./slackwatch.js";
 
-const ROLES = { menubar: MenuBar, titlebar: TitleBar, sidebar: Sidebar, tabs: Tabs, pane: PaneHeader, status: StatusBar, dock: Dock, menu: Menu, sheet: Sheet, desk: Desk, drag: Drag, aqua: AquaWindow, notes: Notes, slack: Slack };
+const ROLES = { menubar: MenuBar, titlebar: TitleBar, sidebar: Sidebar, tabs: Tabs, pane: PaneHeader, status: StatusBar, dock: Dock, menu: Menu, sheet: Sheet, desk: Desk, drag: Drag, aqua: AquaWindow, notes: Notes, slack: Slack, notice: Notice };
 
 // Key commands ("snowleopard.<command>" in keys.json), taken by the menu bar's copy.
 const COMMANDS = {

@@ -3,8 +3,10 @@
 // with its agent's icon), the zebra separator and the Trash. A light on the
 // shelf under every space that's running an agent (brighter under the shown
 // one); a red count badge for agents that finished or need you, and a
-// space with a blocked agent bounces until you look. Hover shows the name,
-// click opens, right-click lists its tabs. Minimized torn-off windows wait
+// space whose agent has just started to need you bounces its folder a few
+// times (and may open a notice, notice.js). Hover shows the name,
+// click opens, right-click lists its tabs. Herdr's own icon goes to the agent
+// that needs you most; right-click lists the agents. Minimized torn-off windows wait
 // between the separator and the Trash; click one to bring it back.
 // Applications kept in the Dock ("sl.dockApps", View › Dock Applications…)
 // sit beside Herdr: click opens one, right-click opens the shown space's
@@ -19,7 +21,9 @@ import { spaces, agents, run, shared, exec } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, oval, vgrad, programIcon, leadProgram, countBadge, openMenu, closeMenus, menuSize,
   spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, openWin, winState, WIN_APPS, openSlackTab,
+  STATUS_WORD, tabLabel, pref,
 } from "./kit.js";
+import { withStatus, urgentAgent, agentName, agentSpace, showNotice } from "./notice.js";
 import { watchSlack, slackBadge } from "./slackwatch.js";
 
 const ICON_SIZE = 48;
@@ -30,18 +34,39 @@ const SURFACE = 16;
 const MARGIN = 3; // under the shelf
 const SEP = 18; // the separator's slot
 
+// Capitals, as on Leopard's folder glyphs: one letter for a one-word name.
 function initials(name) {
   const words = String(name ?? "").replace(/[^\p{L}\p{N}]+/gu, " ").trim().split(/\s+/).filter(Boolean);
   if (!words.length) return "~";
-  if (words.length === 1) return words[0].slice(0, 2).replace(/^./, (c) => c.toUpperCase());
+  if (words.length === 1) return words[0][0].toUpperCase();
   return (words[0][0] + words[1][0]).toUpperCase();
 }
+
+const BOUNCES = 3;
+const CYCLE = 1000; // ms: one hop, its rebound and a pause
+
+/** The Dock's hop at t ms into a cycle: up 16 px easing out, down, a small rebound, rest. */
+function hop(t) {
+  const p = (t % CYCLE) / CYCLE;
+  if (p < 0.35) return -16 * (1 - (1 - p / 0.35) ** 2);
+  if (p < 0.75) return -16 * (1 - ((p - 0.35) / 0.4) ** 2);
+  if (p < 0.9) return -3 * Math.sin(((p - 0.75) / 0.15) * Math.PI);
+  return 0;
+}
+
+const RANK = { blocked: 0, done: 1, working: 2 };
 
 export default class Dock {
   init(_p, cx) {
     this.size = null;
     this.hover = null;
     this.running = new Set();
+    // Which agents needed you last time we looked (null until the first look), the folders
+    // hopping now (space id → start time) and the notice still up.
+    this.waiting = null;
+    this.hops = new Map();
+    this.notice = null;
+    cx.timer.every(500, (cx) => this.watch(cx));
     // Which kept apps are running, for their lights: a process list every few seconds.
     this.poll(cx);
     cx.timer.every(4000, (cx) => this.poll(cx));
@@ -63,6 +88,57 @@ export default class Dock {
         }
       } catch {}
     });
+  }
+
+  /** Bounces the folder and opens a notice for every agent that has just started to need you. */
+  watch(cx) {
+    const now = new Set(withStatus("blocked").map((a) => a.address));
+    const before = this.waiting;
+    this.waiting = now;
+    if (before) {
+      const fresh = agents().filter((a) => now.has(a.address) && !before.has(a.address));
+      const unseen = fresh.filter((a) => !spaces().find((s) => s.id === a.space)?.active);
+      if (pref("bounce") && unseen.length) {
+        for (const a of unseen) if (!this.hops.has(a.space)) this.hops.set(a.space, Date.now());
+        this.tick ??= cx.timer.every(40, (cx) => this.hopAll(cx));
+      }
+      const last = fresh.filter((a) => !a.focused).pop();
+      if (pref("notice") && last) this.notice = showNotice(last, this.notice);
+    }
+  }
+
+  /** One frame of every hopping folder; the animation stops after BOUNCES hops or when you look. */
+  hopAll(cx) {
+    const now = Date.now();
+    const active = spaces().find((s) => s.active)?.id;
+    for (const [id, t0] of this.hops) if (id === active || now - t0 >= CYCLE * BOUNCES) this.hops.delete(id);
+    if (!this.hops.size) {
+      this.tick?.cancel();
+      this.tick = null;
+    }
+    cx.notify();
+  }
+
+  /** The agents, grouped as the Dock menu lists them: needs you, done, working. */
+  agentMenu() {
+    const items = [];
+    for (const status of ["blocked", "done", "working"]) {
+      const list = withStatus(status);
+      if (!list.length) continue;
+      items.push({ header: true, label: STATUS_WORD[status] });
+      for (const a of list)
+        items.push({
+          label: agentName(a),
+          detail: agentSpace(a),
+          icon: a.program?.icon && !a.program.tint ? a.program.icon : null,
+          checked: a.focused,
+          act: { run: ["agent.focus", { terminal: a.address }] },
+        });
+    }
+    if (items.length) items.push({ sep: true });
+    items.push({ label: "Go to…", act: { run: ["mod.open", { name: "picker" }] } });
+    items.push({ label: "Dock Applications…", act: { sheet: ["dockapps", {}] } });
+    return items;
   }
 
   appItems(it) {
@@ -90,15 +166,16 @@ export default class Dock {
     for (const a of dockApps()) list.push({ kind: "dapp", id: `app-${a.path}`, label: a.name, app: a, count: WIN_APPS[appName(a.path)] === "slack" ? slackBadge() : 0 });
     for (const s of spaces()) {
       const mine = ags.filter((a) => a.space === s.id);
+      // The folder wears the most urgent agent's badge: blocked, then done, working, the first.
+      const top = mine.reduce((m, a) => (m && (RANK[m.status] ?? 3) <= (RANK[a.status] ?? 3) ? m : a), null);
       list.push({
         kind: "space",
         id: s.id,
         label: s.machine ? `${s.name} (${s.machine})` : s.name,
         space: s,
-        blocked: mine.some((a) => a.status === "blocked"),
-        count: mine.filter((a) => a.status === "blocked" || a.status === "done").length,
+        count: mine.filter((a) => a.status === "blocked" || (a.status === "done" && pref("doneBadge"))).length,
         running: mine.length > 0,
-        program: leadProgram(s.id),
+        program: top?.program ?? leadProgram(s.id),
       });
     }
     list.push({ kind: "sep", id: "sep" });
@@ -106,7 +183,7 @@ export default class Dock {
     for (const [id, w] of Object.entries(out)) {
       const info = w.min ? tabInfo(id) : null;
       if (!info) continue;
-      list.push({ kind: "win", id: `win-${id}`, tab: id, label: `${info.space.name} — ${info.tab.named ? info.tab.name : `Tab ${info.tab.name}`}`, program: leadProgram(info.space.id, id) });
+      list.push({ kind: "win", id: `win-${id}`, tab: id, label: `${info.space.name} — ${tabLabel(info.space.id, info.tab)}`, program: leadProgram(info.space.id, id) });
     }
     for (const a of dockApps()) {
       const win = WIN_APPS[appName(a.path)];
@@ -129,7 +206,7 @@ export default class Dock {
     const s = spaces().find((x) => x.active);
     const tab = s?.tabs.find((t) => t.active);
     return [
-      { label: tab ? `Close Tab “${tab.name}”…` : "Close Tab…", shortcut: shortcut("tab.close"), disabled: !tab, act: { sheet: ["closetab", { tab: tab?.id }] } },
+      { label: tab ? `Close Tab “${tabLabel(s.id, tab)}”…` : "Close Tab…", shortcut: shortcut("tab.close"), disabled: !tab, act: { sheet: ["closetab", { tab: tab?.id }] } },
       { label: s ? `Close Space “${s.name}”…` : "Close Space…", disabled: !s, act: { sheet: ["closespace", { space: s?.id }] } },
     ];
   }
@@ -154,7 +231,7 @@ export default class Dock {
           .absolute()
           .top(s * 0.44)
           .left(0)
-          .w(s)
+          .w(agent ? s - Math.round(s * 0.38) : s)
           .h(s * 0.36)
           .flex()
           .items_center()
@@ -175,7 +252,8 @@ export default class Dock {
     let face = div().relative().w(ICON_SIZE).h(ICON_SIZE).child(this.art(it));
     if (it.count) face = face.child(div().absolute().top(-6).right(-8).child(countBadge(it.count, 21)));
     let lift = div().absolute().left(0).w(ICON_SIZE).h(ICON_SIZE).top(0).child(face);
-    if (it.blocked && !it.space?.active) lift = lift.loop("top", { from: 0, to: -16, period: 760 });
+    const t0 = this.hops.get(it.id);
+    if (t0) lift = lift.top(hop(Date.now() - t0));
     return div()
       .id(`dk-${it.id}`)
       .absolute()
@@ -202,14 +280,20 @@ export default class Dock {
         cx.notify();
       })
       .on_click(() => this.click(it))
-      .on_mouse_down("left", (e) => {
+      .on_mouse_down("left", (e, cx) => {
+        // The real Dock hides its label the moment you click.
+        if (this.hover) {
+          this.hover = null;
+          cx.notify();
+        }
         if (it.kind === "trash") this.menuAbove(this.trashItems(), e.bounds);
       })
       .on_mouse_down("right", (e, cx) => {
         cx.stop_propagation();
+        this.hover = null;
         if (it.kind === "space") this.menuAbove(spaceItems(it.space), e.bounds);
         if (it.kind === "dapp") this.menuAbove(this.appItems(it), e.bounds);
-        if (it.kind === "app") this.menuAbove([{ label: "Dock Applications…", act: { sheet: ["dockapps", {}] } }], e.bounds);
+        if (it.kind === "app") this.menuAbove(this.agentMenu(), e.bounds);
         if (it.kind === "win")
           this.menuAbove(
             [
@@ -223,7 +307,13 @@ export default class Dock {
   }
 
   click(it) {
-    if (it.kind === "app") return run("mod.open", { name: "picker" });
+    // Like any Dock icon: go to the app, here the agent that needs you most (else the picker).
+    if (it.kind === "app") {
+      this.hover = null;
+      const a = urgentAgent();
+      return a ? run("agent.focus", { terminal: a.address }) : run("mod.open", { name: "picker" });
+    }
+    this.hover = null;
     if (it.kind === "space") run("space.select", { id: it.space.id });
     if (it.kind === "win") restoreTorn(it.tab);
     if (it.kind === "dapp") {
