@@ -3,6 +3,8 @@
 // of the vault's folders and notes, the note rendered as Markdown with its
 // [[wiki-links]] followed in place, and an Edit mode that saves the file (⌘S,
 // or Done). Search matches note names, and their text from two letters on.
+// New Note (⌘N) asks for a name above the list and makes the note in the shown
+// note's folder, opened for editing.
 // The bottom edge's grip resizes the window. Opened from Obsidian's Dock icon.
 //
 // Herdr moves an overlay window by any press its mod doesn't stop, so the
@@ -115,6 +117,7 @@ export default class Notes {
     this.query = "";
     this.hits = null; // notes whose text matches the query
     this.expanded = new Set();
+    this.naming = null; // the new note's name field while it's asked for
     this.search = InputState.new({ placeholder: "Search" });
     this.search.on("change", (_e, cx) => {
       this.query = this.search.value().trim();
@@ -250,6 +253,49 @@ export default class Notes {
     const q = this.query.toLowerCase();
     if (!q) return [];
     return this.notes.filter((p) => title(p).toLowerCase().includes(q) || this.hits?.has(p));
+  }
+
+  /** Asks for a new note's name, in a field above the list. */
+  startNew(cx) {
+    if (!this.vault) return;
+    this.naming = InputState.new({ placeholder: "Note name" });
+    this.naming.on("submit", (_e, cx) => this.create(this.naming?.value() ?? "", cx));
+    this.naming.focus();
+    cx.notify();
+  }
+
+  cancelNew(cx) {
+    this.naming?.release();
+    this.naming = null;
+    cx.notify();
+  }
+
+  /** Makes the note in the shown note's folder (a free name: "Name 2" if it's taken), then edits it. */
+  create(raw, cx) {
+    const name = raw.replace(/[\\/:*?"<>|#^[\]]/g, " ").replace(/\s+/g, " ").trim();
+    if (!name) return this.cancelNew(cx);
+    const folder = this.note ? dir(this.note) : "";
+    const taken = new Set(this.all.map((p) => p.toLowerCase()));
+    let rel = folder ? `${folder}/${name}.md` : `${name}.md`;
+    for (let i = 2; taken.has(rel.toLowerCase()); i++) rel = folder ? `${folder}/${name} ${i}.md` : `${name} ${i}.md`;
+    this.cancelNew(cx);
+    cx.spawn(async (cx) => {
+      try {
+        await writeTextFile(this.abs(rel), `# ${name}\n\n`, null);
+      } catch (e) {
+        this.status = `Couldn't make the note: ${e}`;
+        return cx.notify();
+      }
+      this.all = [...this.all, rel].sort(byName);
+      this.notes = this.all.filter((p) => /\.md$/i.test(p));
+      this.index();
+      Object.assign(KEEP, { all: this.all, notes: this.notes, folders: this.folders });
+      this.query = "";
+      this.search.set_value("");
+      this.show(rel, cx);
+      // Opened for writing once it's shown.
+      cx.timer.after(150, (cx) => this.edit(cx));
+    });
   }
 
   edit(cx) {
@@ -396,6 +442,7 @@ export default class Notes {
               { id: "n-fwd", glyph: GLYPH.right, size: 12, w: 30, tooltip: "Forward", onClick: (_e, cx) => this.go(this.fwd, this.back, cx) },
             ]),
           )
+          .child(textured([{ id: "n-new", glyph: GLYPH.plus, size: 11, w: 34, tooltip: "New note (⌘N)", onClick: (_e, cx) => this.startNew(cx) }]))
           .child(
             textured([
               {
@@ -500,6 +547,38 @@ export default class Notes {
       .bg(live ? C.source : C.sourceOff)
       .pt(6)
       .child(div().flex_none().px(10).pb(3).text_size(11).font_weight(700).text_color(C.heading).child(this.query ? "SEARCH" : (this.vault ? base(this.vault) : "VAULT").toUpperCase()))
+      .when(Boolean(this.naming), (el) =>
+        el.child(
+          v_flex()
+            .id("n-naming")
+            .flex_none()
+            .px(8)
+            .pb(6)
+            .gap(3)
+            .child(
+              div()
+                .relative()
+                .w(SIDE - 16)
+                .h(22)
+                .child(paint(rrect(SIDE - 16, 22, 3), "#3875d7", SIDE - 16, 22))
+                .child(paint(rrect(SIDE - 18, 20, 2, 1, 1), "#ffffff", SIDE - 16, 22))
+                .child(
+                  h_flex()
+                    .absolute()
+                    .top(0)
+                    .left(0)
+                    .w(SIDE - 16)
+                    .h(22)
+                    .px(6)
+                    .gap(5)
+                    .items_center()
+                    .child(image(ICON.note).flex_none().w(14).h(14))
+                    .child(Input.new(this.naming).flex_1().h(22).text_size(12).text_color("#000000")),
+                ),
+            )
+            .child(div().text_size(10).text_color(C.gray).child(`in ${this.note && dir(this.note) ? dir(this.note) : base(this.vault ?? "")} · Return makes it, Esc cancels`)),
+        ),
+      )
       .child(
         v_flex()
           .relative()
@@ -614,6 +693,8 @@ export default class Notes {
       })
       .on_key_down((e, cx) => {
         if (e.keystroke === "cmd-s" && this.editor) cx.spawn((cx) => this.save(cx, true));
+        else if (e.keystroke === "cmd-n") this.startNew(cx);
+        else if (e.keystroke === "escape" && this.naming) this.cancelNew(cx);
         else if (e.keystroke === "cmd-e") this.editor ? cx.spawn((cx) => this.save(cx)) : this.edit(cx);
         else if (e.keystroke === "cmd-[") this.go(this.back, this.fwd, cx);
         else if (e.keystroke === "cmd-]") this.go(this.fwd, this.back, cx);

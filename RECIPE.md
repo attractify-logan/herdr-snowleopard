@@ -142,7 +142,11 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   inside code they stay as written. Search matches note names, and their text
   from two letters (`grep -rliF`). Edit (⌘E) swaps in a Markdown editor; ⌘S or
   Done saves with `writeTextFile(path, text, expected)`, so a note changed on
-  disk meanwhile isn't overwritten. ⌘[ and ⌘] go back and forward. Red closes
+  disk meanwhile isn't overwritten. ⌘[ and ⌘] go back and forward. New Note (the toolbar's +, or ⌘N) asks
+  for a name in a field above the list (Return makes it, Escape cancels) and
+  writes `# Name` to `Name.md` in the shown note's folder (`Name 2.md` when
+  taken; characters a file name can't hold become spaces), then opens it in
+  Edit. Red closes
   it, yellow minimizes it beside the Trash, green zooms it. It opens on the
   note read last, else the one changed last. Its Dock menu: Open Vault in
   Herdr, Open Obsidian App.

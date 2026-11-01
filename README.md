@@ -33,7 +33,7 @@ and Dock icon runs a real Herdr command.
 - **Notes (beta).** With Obsidian in the Dock, its icon opens your vault in an
   Aqua window inside Herdr. The vault's folders and notes are in a source list,
   notes render as Markdown, `[[wiki-links]]` open notes in place, and search
-  matches names and text. Edit (⌘E) changes the note; ⌘S or Done saves it, and
+  matches names and text. + (⌘N) makes a new note in the shown note's folder; Edit (⌘E) changes the note; ⌘S or Done saves it, and
   a note changed on disk in the meantime is never overwritten. Obsidian itself
   stays one right-click away.
 - **Slack (beta).** With Slack in the Dock, its icon opens Slack as a tab in
