@@ -900,6 +900,39 @@ export function startTornResize(tabId, e, frame, target = null) {
   });
 }
 
+/** The main window's title and tab bars, in window coordinates: where a torn
+ *  window is dropped to put its tab back. */
+export function mainBars() {
+  const placed = shared("sl.placed");
+  const w = placed?.w ?? shared("sl.desk")?.window?.w;
+  if (!w) return null;
+  const x = placed?.w ? placed.x : MARGIN.x;
+  const y = MENUBAR + (placed?.w ? placed.y : MARGIN.y);
+  return { x, y, w, h: 58 + 24 };
+}
+
+/** A press on a torn window's title: the drag overlay moves its outline, and
+ *  dropping it on the main window's title or tab bar puts the tab back. */
+export function startTornMove(tabId, e, frame, winOverlay) {
+  openOverlay({
+    mod: "snowleopard",
+    kind: "window",
+    frame: "none",
+    width: 1,
+    height: 1,
+    at: { x: 0, y: 0 },
+    props: { role: "drag", mode: "tornmove", tab: tabId, start: { x: e.position.x, y: e.position.y }, frame, winOverlay },
+  });
+}
+
+/** Moves a torn window: reopened by its key at the new spot. */
+export function moveTorn(tabId, at) {
+  const w = torn()[tabId];
+  if (!w) return;
+  setTorn({ ...torn(), [tabId]: { ...w, at } });
+  openTorn(tabId, { at, big: w.big });
+}
+
 /** Records where a torn window is (its title bar's top left), after a drag. */
 export function placeTorn(tabId, at) {
   const w = torn()[tabId];

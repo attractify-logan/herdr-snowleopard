@@ -27,8 +27,9 @@ and Dock icon runs a real Herdr command.
 - **More windows.** Drag a tab down out of the tab bar (or choose Move Tab to
   New Window) to give it its own window, with its terminals live inside. Red
   closes it (the tab ends, after an alert), yellow minimizes it into the Dock,
-  green zooms it, and the bottom-right grip resizes it. Right-click its title to
-  move the tab back, or use Window › Merge All Windows.
+  green zooms it, and the bottom-right grip resizes it. Drag its title onto the
+  main window's title or tab bar to put the tab back (or right-click the title,
+  or use Window › Merge All Windows).
 - **Notes (beta).** With Obsidian in the Dock, its icon opens your vault in an
   Aqua window inside Herdr. The vault's folders and notes are in a source list,
   notes render as Markdown, `[[wiki-links]]` open notes in place, and search

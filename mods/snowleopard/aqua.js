@@ -12,7 +12,7 @@ import { h_flex } from "gpui-base";
 import { props, panes, closeOverlay, run } from "herdr";
 import {
   C, GLYPH, ICON, WIN, key, paint, rrect, vgrad, embossed, bead, closeMenus, openMenu, openSheet, torn, tabInfo, putBack, minimizeTorn, zoomTorn,
-  placeTorn, startTornResize, appSize,
+  placeTorn, startTornResize, appSize, startTornMove,
 } from "./kit.js";
 
 export default class AquaWindow {
@@ -118,10 +118,19 @@ export default class AquaWindow {
       // Herdr moves the window while the button is down and keeps the release,
       // so where it is gets noted on the next press (here or on a light), before
       // anything reopens it.
-      .on_mouse_down("left", (e) => {
+      // The title moves the window (an outline follows the pointer; the window
+      // follows on release), and dropping it on the main window's title or tab
+      // bar puts the tab back.
+      .on_mouse_down("left", (e, cx) => {
         closeMenus();
-        place(e.bounds, 0, 0);
-        if (e.click_count >= 2) zoomTorn(id, p.overlay);
+        cx.stop_propagation();
+        if (e.click_count >= 2) return zoomTorn(id, p.overlay);
+        const b = e.bounds;
+        const t = torn()[id];
+        if (!b || !t) return;
+        const a = appSize();
+        const fh = t.big && a ? Math.round(a.h * WIN.bigH) : t.h ?? WIN.h;
+        startTornMove(id, e, { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: fh }, p.overlay);
       })
       .on_mouse_down("right", (e, cx) => {
         cx.stop_propagation();

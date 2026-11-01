@@ -18,7 +18,7 @@
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { props, closeOverlay, shared, setShared } from "herdr";
-import { C, FONT, ICON, placeFrame, setSavedFrame, desktopLimits, tearOff, tearSpot, resizeTorn, resizeWin, paint, rrect, vgrad, embossed, WIN, MIN_W, MIN_H } from "./kit.js";
+import { C, FONT, ICON, placeFrame, setSavedFrame, desktopLimits, tearOff, tearSpot, resizeTorn, resizeWin, mainBars, moveTorn, putBack, torn, paint, rrect, vgrad, embossed, WIN, MIN_W, MIN_H } from "./kit.js";
 
 export default class Drag {
   init(_p, cx) {
@@ -42,7 +42,7 @@ export default class Drag {
   move(e, cx) {
     const p = props() ?? {};
     if (!p.start) return;
-    if (p.mode === "tornresize") {
+    if (p.mode === "tornresize" || p.mode === "tornmove") {
       this.pos = { x: e.position.x, y: e.position.y };
       return cx.notify();
     }
@@ -83,6 +83,24 @@ export default class Drag {
     return { x: Math.round(p.start.x - along * w), y: f.y, w, h };
   }
 
+  /** Is the pointer over the main window's title or tab bar? */
+  overBars() {
+    const b = mainBars();
+    const at = this.pos;
+    return Boolean(b && at && at.x >= b.x && at.x <= b.x + b.w && at.y >= b.y && at.y <= b.y + b.h);
+  }
+
+  /** A moved torn window's top left, kept on the desktop. */
+  movedFrame() {
+    const p = props() ?? {};
+    const f = p.frame;
+    const x = f.x + (this.pos.x - p.start.x);
+    const y = f.y + (this.pos.y - p.start.y);
+    const maxX = this.size ? this.size.width - 60 : x;
+    const maxY = this.size ? this.size.height - 40 : y;
+    return { x: Math.round(Math.max(-f.w + 60, Math.min(maxX, x))), y: Math.round(Math.max(22, Math.min(maxY, y))) };
+  }
+
   /** A torn window's frame for the grip at the pointer: its top left stays. */
   tornFrame() {
     const p = props() ?? {};
@@ -97,6 +115,12 @@ export default class Drag {
 
   end() {
     const p = props() ?? {};
+    if (p.mode === "tornmove" && this.pos && !this.done) {
+      this.done = true;
+      const moved = Math.abs(this.pos.x - p.start.x) + Math.abs(this.pos.y - p.start.y) > 3;
+      if (this.overBars()) putBack(p.tab, p.winOverlay);
+      else if (moved) moveTorn(p.tab, this.movedFrame());
+    }
     if (p.mode === "tornresize" && this.pos && !this.done) {
       this.done = true;
       if (p.target) resizeWin(p.target, this.tornFrame());
@@ -131,6 +155,28 @@ export default class Drag {
   ghost() {
     const p = props() ?? {};
     if (!this.pos) return null;
+    if (p.mode === "tornmove") {
+      if (this.overBars()) {
+        // Over the main window's bars: a tab, lifted, where it will land.
+        const b = mainBars();
+        const name = p.name ?? "";
+        const w = 150;
+        const x = Math.max(b.x, Math.min(b.x + b.w - w, this.pos.x - w / 2));
+        return div()
+          .absolute()
+          .left(b.x)
+          .top(b.y)
+          .w(b.w)
+          .h(b.h)
+          .rounded(5)
+          .border_2()
+          .border_color("#3875d7d0")
+          .bg("#3875d71a")
+          .child(div().absolute().left(x - b.x).top(58).w(w).h(24).rounded(2).bg("#cfdcf0e0").border_1().border_color("#3875d7").flex().items_center().justify_center().text_size(11).text_color("#1d3f78").child("Put tab back here"));
+      }
+      const f = this.movedFrame();
+      return div().absolute().left(f.x).top(f.y).w(p.frame.w).h(p.frame.h).rounded(5).border_2().border_color("#3875d7b0").bg("#3875d70f");
+    }
     if (p.mode === "tornresize") {
       // The new frame's outline, as Aqua draws a live-resize rectangle.
       const f = this.tornFrame();
@@ -194,6 +240,7 @@ export default class Drag {
       .size_full()
       .when(Boolean(g), (el) => el.child(g))
       .when(props()?.mode === "resize" || props()?.mode === "tornresize", (el) => el.cursor_nwse_resize())
+      .when(props()?.mode === "tornmove", (el) => el.cursor_grabbing())
       .on_mouse_move((e, cx) => this.move(e, cx))
       .on_mouse_up("left", () => this.end())
       .on_mouse_down("left", (_e, cx) => {

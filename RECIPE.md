@@ -98,8 +98,10 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   same. Drag the title to move it, and the grip in its bottom edge to resize
   it (a blue outline follows the pointer; the window takes the size on
   release, minimum 360×180). Red closes it as a Mac window closes: an alert
-  asks, then the tab and its terminals end. Right-click the title for Move Tab
-  to Main Window. Yellow minimizes it into the Dock (between the separator and
+  asks, then the tab and its terminals end. Dragging the title moves a blue outline
+  and the window follows on release; dropped on the main window's title or
+  tab bar (a "Put tab back here" tab shows there), the tab goes back.
+  Right-click the title for Move Tab to Main Window. Yellow minimizes it into the Dock (between the separator and
   the Trash, as a tiny window; click to restore in the same spot), green or a
   double-click on the title zooms it (centered in the app; again goes back
   where it was).
@@ -241,6 +243,11 @@ Ocean and Novel, using Terminal.app's ANSI palette.
 - `layout()` doesn't reflect `layout.resize` clicks (they live in
   `layouts/.state/`), so the window's placement is tracked in shared
   `sl.placed` instead of being read back from the layout.
+- Herdr moves an overlay window by itself and tells the mod nothing about
+  where it's dropped, so torn windows move with the `drag` overlay
+  (`tornmove`) instead: an outline during the drag, the window reopened at its
+  new spot on release, and a drop on the main window's bars (`mainBars()`,
+  from `sl.placed` or the zoomed margins) puts the tab back.
 - Overlay windows can't be resized by Herdr, so a torn window's new size is
   applied by reopening it (same key, in place) on release, with an outline
   while dragging; reopening on every frame would be too heavy.
