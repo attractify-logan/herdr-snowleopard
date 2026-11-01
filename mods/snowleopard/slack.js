@@ -698,7 +698,7 @@ export default class Slack {
   render(_cx) {
     const p = props() ?? {};
     // Closed from elsewhere (sl.slack open: false): close, as torn-off windows do.
-    if (!p.inTab && winState("slack").open === false && !this.closing) {
+    if (!p.inTab && (winState("slack").open === false || Boolean(winState("slack").big) !== Boolean(p.big)) && !this.closing) {
       this.closing = true;
       closeOverlay(p.overlay);
     }

@@ -817,7 +817,7 @@ function openTorn(tabId, o = {}) {
       border: { width: 1, color: "#00000070" },
       background: "background",
       children: [
-        { type: "block", size: { px: WIN.title }, content: { mod: "snowleopard", props: { role: "aqua", tab: tabId } } },
+        { type: "block", size: { px: WIN.title }, content: { mod: "snowleopard", props: { role: "aqua", tab: tabId, big: Boolean(o.big) } } },
         body,
         // The bottom edge and its resize grip.
         { type: "block", size: { px: WIN.bar }, content: { mod: "snowleopard", props: { role: "aqua", part: "bar", tab: tabId } } },
@@ -1000,7 +1000,7 @@ export function openWin(name, o = {}) {
     height: n.big ? WIN.bigH : n.h ?? APP_WIN[name].h,
     ...((n.big ? zoomedSpot() : n.at) ? { at: n.big ? zoomedSpot() : n.at } : {}),
     // The size it opens at, so it draws its background before it has measured itself.
-    props: { role: name, ...(n.big ? {} : { size: [n.w ?? APP_WIN[name].w, n.h ?? APP_WIN[name].h] }) },
+    props: { role: name, big: Boolean(n.big), ...(n.big ? {} : { size: [n.w ?? APP_WIN[name].w, n.h ?? APP_WIN[name].h] }) },
   });
   setWin(name, { ...o, open: true, min: false });
 }

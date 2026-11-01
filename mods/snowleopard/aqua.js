@@ -9,7 +9,7 @@
 
 import { div, image, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { props, panes, closeOverlay } from "herdr";
+import { props, panes, closeOverlay, run } from "herdr";
 import {
   C, GLYPH, ICON, WIN, key, paint, rrect, vgrad, embossed, bead, closeMenus, openMenu, openSheet, torn, tabInfo, putBack, minimizeTorn, zoomTorn,
   placeTorn, startTornResize, appSize,
@@ -78,9 +78,22 @@ export default class AquaWindow {
     // Put back from elsewhere (Window › Merge All Windows): close. Not when the tab
     // can't be found: the lists are empty for a moment while Herdr starts or quits,
     // and closing then would stop it coming back; Herdr closes it when its terminal ends.
-    if (!torn()[id] && !this.closing) {
+    // The zoomed and standard windows have their own keys: whichever doesn't match
+    // the state (after a zoom, an un-zoom or a resize from either) closes itself.
+    // A minimized one is closed too (the Dock reopens the right one).
+    if ((!torn()[id] || torn()[id].min || Boolean(torn()[id].big) !== Boolean(p.big)) && !this.closing) {
       this.closing = true;
       closeOverlay(p.overlay);
+    }
+    // Herdr brings a settled tab back to the lists when its agent needs you; while it
+    // has its own window, put it away again, or the main window shows the same
+    // terminal too (one terminal drawn at two sizes garbles both).
+    if (info && !info.tab.settled && torn()[id] && !torn()[id].min && !this.resettling) {
+      this.resettling = true;
+      cx.timer.after(0, () => {
+        this.resettling = false;
+        if (torn()[id] && !torn()[id].min) run("tab.settle", { id });
+      });
     }
     const w = this.size?.width ?? 0;
     const h = this.size?.height ?? 22;

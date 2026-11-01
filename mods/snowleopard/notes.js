@@ -590,7 +590,7 @@ export default class Notes {
   render(_cx) {
     // Closed from elsewhere (sl.notes open: false): close, as torn-off windows do.
     const p = props() ?? {};
-    if (!p.vault && winState("notes").open === false && !this.closing) {
+    if (!p.vault && (winState("notes").open === false || Boolean(winState("notes").big) !== Boolean(p.big)) && !this.closing) {
       this.closing = true;
       closeOverlay(p.overlay);
     }
