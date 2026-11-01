@@ -10,7 +10,7 @@ import { h_flex } from "gpui-base";
 import { spaces, focused, panes, run, knownAgents, shared, window as appWindow } from "herdr";
 import {
   C, GLYPH, ICON, key, paint, rrect, vgrad, embossed, bead, textured, openMenu, closeMenus, shortcut, shown,
-  startDrag, toggleZoom, reportSize, remoteSpaceItems,
+  startDrag, toggleZoom, reportSize, remoteSpaceItems, tabLabel,
 } from "./kit.js";
 
 const TITLE = 22;
@@ -31,9 +31,9 @@ export default class TitleBar {
   lights() {
     const on = key() || this.lit;
     const kinds = [
-      ["close", "window.close", GLYPH.close, "Close Window"],
-      ["min", "window.minimize", GLYPH.minus, "Minimize"],
-      ["zoom", null, GLYPH.plus, "Zoom"],
+      ["close", "window.close", GLYPH.close],
+      ["min", "window.minimize", GLYPH.minus],
+      ["zoom", null, GLYPH.plus],
     ];
     return h_flex()
       .id("lights")
@@ -45,12 +45,11 @@ export default class TitleBar {
         cx.notify();
       })
       .children(
-        kinds.map(([kind, command, glyph, tip]) =>
+        kinds.map(([kind, command, glyph]) =>
           div()
             .id(`tl-${kind}`)
             .flex_none()
             .child(bead(on ? kind : "off", 14, this.lit ? glyph : null))
-            .tooltip(tip)
             .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
             .on_click(() => (command ? run(command) : toggleZoom(this.size?.width))),
         ),
@@ -104,7 +103,7 @@ export default class TitleBar {
     const s = spaces().find((x) => x.active);
     const tab = s?.tabs.find((t) => t.active);
     const pane = panes().find((p) => p.pane === focused()?.pane);
-    const tabWord = tab ? (tab.named ? tab.name : pane?.program && !pane.program.shell ? pane.program.name : pane?.program?.name ?? `Tab ${tab.name}`) : "";
+    const tabWord = tab ? tabLabel(s.id, tab) : "";
     const title = s ? `${s.name}${tabWord ? ` — ${tabWord}` : ""}` : "Herdr";
     const zoomed = Boolean(pane?.zoomed);
 
@@ -133,7 +132,7 @@ export default class TitleBar {
       .child(textured([{ id: "tb-gear", glyph: GLYPH.gear, menu: true, w: 44, tooltip: "Action", onDown: (e) => this.popup(this.actionItems(), e, "gear") }]))
       .child(textured([{ id: "tb-new", glyph: GLYPH.plus, size: 12, menu: true, w: 44, tooltip: "New tab, space or agent", onDown: (e) => this.popup(this.newItems(), e, "new") }]))
       .child(div().flex_1())
-      .child(this.search(live));
+      .child(w > 0 && w < 720 ? textured([{ id: "tb-search", glyph: GLYPH.search, size: 13, w: 30, tooltip: "Search every Herdr command", onClick: () => run("app.palette") }]) : this.search(live));
 
     return div()
       .id("root")
