@@ -49,6 +49,8 @@ and Dock icon runs a real Herdr command.
   spinner means working, a red badge means it needs you, and a blue dot means
   done.
 - **Tabs and panes.** The tab bar works like Terminal.app's, with ⌘ numbers.
+  A new tab asks for its name (turn that off in Herdr › Snow Leopard
+  Settings…).
   Split panes get small title strips.
 - **Dock.** Each space is a folder with its initials and its agent's icon. A
   space bounces when an agent is blocked. Minimized windows wait by the Trash,

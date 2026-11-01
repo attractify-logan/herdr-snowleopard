@@ -614,7 +614,7 @@ export function closeMenus() {
   setShared("sl.menu", null);
 }
 
-const SHEET = { about: [300, 340], forcequit: [440, 400], dockapps: [400, 480], rename: [420, 170] };
+const SHEET = { about: [300, 340], forcequit: [440, 400], dockapps: [400, 480], rename: [420, 170], prefs: [420, 190] };
 
 /** Opens a sheet (the sheet role): kind and its props. */
 export function openSheet(kind, p = {}) {
@@ -687,6 +687,18 @@ export function remoteSpaceItems() {
   return machines()
     .filter((m) => m.name && m.layout !== "unavailable")
     .map((m) => ({ label: `New Space on ${m.name}`, act: { run: ["space.new", { machine: m.name }] } }));
+}
+
+// ---- preferences (Herdr › Snow Leopard Settings…), shared "sl.prefs"
+
+export const PREF_DEFAULTS = { askTabName: true };
+
+export function pref(name) {
+  return { ...PREF_DEFAULTS, ...(shared("sl.prefs") ?? {}) }[name];
+}
+
+export function setPref(name, value) {
+  setShared("sl.prefs", { ...(shared("sl.prefs") ?? {}), [name]: value });
 }
 
 // ---- the window on the desktop

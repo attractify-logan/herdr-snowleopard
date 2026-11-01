@@ -5,7 +5,8 @@
 //   about       About Herdr: the icon, versions, More Info and Software Update
 //   forcequit   Force Quit Applications: every terminal; Force Quit asks first
 //   dockapps    the applications kept in the Dock: every installed app, checked or not
-//   rename      { what: "tab" | "space", id }: a name field; empty gives Herdr's name back
+//   rename      { what: "tab" | "space", id, isNew }: a name field; empty gives Herdr's name back
+//   prefs       Snow Leopard Settings: Aqua checkboxes
 // The default button is Aqua's pulsing blue gel; Return presses it, Escape
 // cancels.
 
@@ -14,7 +15,7 @@ import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { props, closeOverlay, run, spaces, agents, panes, updates, home } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, vgrad, aquaButton, programIcon, plural, base, dockApps, addDockApp, removeDockApp, listApps, makeAppIcons,
-  appIcon, appName,
+  appIcon, appName, pref, setPref,
 } from "./kit.js";
 
 export default class Sheet {
@@ -122,6 +123,7 @@ export default class Sheet {
     if (p.kind === "forcequit") return this.forceQuit();
     if (p.kind === "dockapps") return this.dockApps();
     if (p.kind === "rename") return this.rename(p);
+    if (p.kind === "prefs") return this.prefs();
     const a = this.alert(p) ?? { title: "Unknown sheet", detail: p.kind, yes: "OK", act: () => {} };
     const ok = () => {
       this.close();
@@ -205,7 +207,7 @@ export default class Sheet {
           .flex_1()
           .min_w(0)
           .gap(8)
-          .child(div().text_size(13).font_weight(700).child(p.what === "space" ? "Rename Space" : "Rename Tab"))
+          .child(div().text_size(13).font_weight(700).child(p.isNew ? "Name the New Tab" : p.what === "space" ? "Rename Space" : "Rename Tab"))
           .child(
             div()
               .relative()
@@ -216,11 +218,46 @@ export default class Sheet {
               .child(paint(rrect(w - 2, 2, 0, 1, 1), "#00000014", w, h))
               .child(h_flex().absolute().top(0).left(0).w(w).h(h).px(6).items_center().child(Input.new(this.input).flex_1().h(h).text_size(13).text_color("#000000"))),
           )
-          .child(div().text_size(11).text_color(C.gray).child(p.what === "space" ? "Leave it empty to name the space after its folder again." : "Leave it empty to call the tab by its number again."))
+          .child(div().text_size(11).text_color(C.gray).child(p.isNew ? "Leave it empty to call it by its number. Turn this off in Herdr › Snow Leopard Settings…" : p.what === "space" ? "Leave it empty to name the space after its folder again." : "Leave it empty to call the tab by its number again."))
           .child(div().flex_1())
           .child(h_flex().justify_end().gap(12).child(aquaButton("rn-cancel", "Cancel", () => this.close())).child(aquaButton("rn-ok", "Rename", () => this.doRename(), { primary: true }))),
       );
     return this.frame(body, () => this.doRename());
+  }
+
+  prefs() {
+    const box = (id, label, detail, on, flip) =>
+      h_flex()
+        .id(id)
+        .gap(8)
+        .items_start()
+        .child(
+          div()
+            .relative()
+            .flex_none()
+            .mt(1)
+            .w(14)
+            .h(14)
+            .child(paint(rrect(14, 14, 3), on ? "#2a5db5" : "#8e8e8e", 14, 14))
+            .child(paint(rrect(12, 12, 2, 1, 1), on ? vgrad("#7fb2f2", "#2f6fd6") : vgrad("#ffffff", "#e3e3e3"), 14, 14))
+            .when(on, (el) => el.child(div().absolute().top(-2).left(2).text_size(12).font_weight(700).text_color("#ffffff").child("✓"))),
+        )
+        .child(v_flex().gap(2).child(div().text_size(12).child(label)).child(div().text_size(11).text_color(C.gray).child(detail)))
+        .on_click((_e, cx) => {
+          flip();
+          cx.notify();
+        });
+    const done = () => this.close();
+    const ask = pref("askTabName");
+    const body = v_flex()
+      .size_full()
+      .p(18)
+      .gap(12)
+      .child(div().text_size(13).font_weight(700).child("Snow Leopard Settings"))
+      .child(box("pf-ask", "Ask for a name when I make a new tab", "⌘T, the tab bar's +, and the New menus open the rename alert.", ask, () => setPref("askTabName", !ask)))
+      .child(div().flex_1())
+      .child(h_flex().justify_end().child(aquaButton("pf-done", "Done", done, { primary: true })));
+    return this.frame(body, done);
   }
 
   dockApps() {

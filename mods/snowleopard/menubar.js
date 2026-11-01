@@ -10,7 +10,7 @@ import {
   window as appWindow,
 } from "herdr";
 import {
-  C, FONT, GLYPH, ICON, paint, rrect, vgrad, fillGrad, openMenu, closeMenus, shortcut, shown, plural, torn, tabInfo, canTear, remoteSpaceItems,
+  C, FONT, GLYPH, ICON, paint, rrect, vgrad, fillGrad, openMenu, closeMenus, shortcut, shown, plural, torn, tabInfo, canTear, remoteSpaceItems, pref, openSheet,
 } from "./kit.js";
 
 export const PROFILES = [
@@ -114,6 +114,7 @@ export default class MenuBar {
           { label: "About Herdr", act: { sheet: ["about"] } },
           { sep: true },
           { label: "Preferences…", shortcut: sc("app.settings"), act: { run: ["app.settings", {}] } },
+          { label: "Snow Leopard Settings…", act: { sheet: ["prefs", {}] } },
           { label: "What's New in Herdr", act: { run: ["app.whats_new"] } },
           { sep: true },
           { label: "Hide Herdr", shortcut: sc("app.hide"), act: { run: ["app.hide"] } },
@@ -333,7 +334,22 @@ export default class MenuBar {
       });
   }
 
-  render(_cx) {
+  /** A tab made since the last look, shown and unnamed (⌘T, +, a menu): ask for its
+   *  name, unless that's turned off in Snow Leopard Settings. Agents' tabs come named. */
+  askNames(cx) {
+    const now = new Set();
+    let fresh = null;
+    for (const s of spaces())
+      for (const t of s.tabs) {
+        now.add(t.id);
+        if (this.known && !this.known.has(t.id) && s.active && t.active && !t.named && !t.settled) fresh = t.id;
+      }
+    this.known = now;
+    if (fresh && pref("askTabName")) cx.timer.after(150, () => openSheet("rename", { what: "tab", id: fresh, isNew: true }));
+  }
+
+  render(cx) {
+    this.askNames(cx);
     const list = agents();
     const working = list.filter((a) => a.status === "working").length;
     const blocked = list.filter((a) => a.status === "blocked").length;
