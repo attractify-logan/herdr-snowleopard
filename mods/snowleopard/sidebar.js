@@ -24,6 +24,7 @@ export default class Sidebar {
     this.fold = {};
     this.hot = null;
     this.open = {}; // space id → its tabs shown (a space opens when first shown)
+    this.last = {}; // machine → its space shown last, which stays open while another machine's is shown
     this.hoverRow = null;
     this.hotClose = false;
   }
@@ -218,14 +219,18 @@ export default class Sidebar {
             onClick: () => run("space.new", { machine: g.name }),
           }).tooltip(`Make a space on ${g.name}`),
         );
+      const mk = g.name ?? "";
+      const shown = g.list.find((s) => s.active);
+      if (shown) this.last[mk] = shown.id;
       for (const s of g.list) {
         const urgent = s.status === "blocked" || s.status === "done" || s.status === "working";
         const tabs = s.tabs.filter((t) => !t.settled).length;
         const out = torn();
         const list = s.tabs.filter((t) => !t.settled || out[t.id]);
-        // A space's tabs show when it's the shown space or something there needs you,
+        // A space's tabs show when it's the shown space (or its machine's last shown one, so
+        // showing another machine's space closes nothing here) or something there needs you,
         // unless its triangle has been clicked: that choice wins.
-        const open = this.open[s.id] ?? (s.active || s.status === "blocked" || s.status === "done");
+        const open = this.open[s.id] ?? (s.active || this.last[mk] === s.id || s.status === "blocked" || s.status === "done");
         // Only a row drawn selected gets the inverted mark.
         const sel = s.active && !open;
         sections.push(
