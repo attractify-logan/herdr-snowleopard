@@ -129,6 +129,8 @@ export default class Notes {
     this.back = [];
     this.fwd = [];
     this.editor = null; // an EditorState while editing
+    this.preview = false; // while editing: the edit shown formatted instead of as Markdown
+    this.previewMd = null;
     this.status = "";
     this.sticky = false; // a status that stays until the next note is shown
     this.dirty = false; // edits not saved yet (the close light's dot)
@@ -255,6 +257,16 @@ export default class Notes {
         this.rescanning = 0;
       }
     });
+  }
+
+  /** While editing, the Markdown | Preview switch (⇧⌘E): the edit shown formatted, unsaved,
+   *  and back to its Markdown as it was left. */
+  setPreview(on, cx) {
+    if (!this.editor || on === this.preview) return;
+    // Rendered once per switch, not per frame (a long note's wikify is a redraw's time).
+    if (on) this.previewMd = wikify(this.editor.value());
+    this.preview = on;
+    cx.notify();
   }
 
   /** The Refresh button (⌘R): pulls the vault when it's a git repo (as Obsidian Git's Pull
@@ -444,6 +456,7 @@ export default class Notes {
     if (this.text === null) return;
     this.clearStatus();
     this.dirty = false;
+    this.preview = false;
     this.editor = EditorState.new({
       language: "markdown",
       value: this.text,
@@ -483,6 +496,8 @@ export default class Notes {
     if (!stay) {
       this.editor.release();
       this.editor = null;
+      this.preview = false;
+      this.previewMd = null;
       this.focus.focus();
     }
     cx.notify();
@@ -621,6 +636,14 @@ export default class Notes {
                 onClick: (_e, cx) => (editing ? cx.spawn((cx) => this.save(cx)) : this.edit(cx)),
               },
             ]),
+          )
+          .when(editing, (el) =>
+            el.child(
+              textured([
+                { id: "n-src", text: "Markdown", w: 76, on: !this.preview, tooltip: "Edit the Markdown (⇧⌘E switches)", onClick: (_e, cx) => this.setPreview(false, cx) },
+                { id: "n-pre", text: "Preview", w: 64, on: this.preview, tooltip: "See this edit formatted, before saving (⇧⌘E switches)", onClick: (_e, cx) => this.setPreview(true, cx) },
+              ]),
+            ),
           )
           .child(
             textured([
@@ -807,8 +830,8 @@ export default class Notes {
   }
 
   page() {
-    // Edit keeps the white page and its padding.
-    if (this.editor)
+    // Edit keeps the white page and its padding; its Preview draws the edit as a note is drawn.
+    if (this.editor && !this.preview)
       return div()
         .id("n-edit-area")
         .flex_1()
@@ -822,6 +845,9 @@ export default class Notes {
         .text_color("#1d1d1d")
         .child(Editor.new(this.editor).flex_1().min_h(0))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
+    const shown = this.editor ? this.previewMd ?? "" : this.md ?? "";
+    // The preview has its own scroll box and view, so switching back and forth keeps each where it was.
+    const tag = this.editor ? `pre-${this.note}` : this.note;
     return div()
       .id("n-page")
       .relative()
@@ -838,21 +864,21 @@ export default class Notes {
         el
           .child(
             v_flex()
-              .id(`sl-note-${this.note}`)
+              .id(`sl-note-${tag}`)
               .size_full()
               .px(26)
               .pt(16)
               .pb(16)
               .overflow_y_scroll()
               .child(
-                TextView.markdown(`n-md-${this.note}`, this.md ?? "")
+                TextView.markdown(`n-md-${tag}`, shown)
                   // Not selectable (it is by default): the theme's selection color is the terminal's (dark gray in
                   // Pro), which reads as black bars on this white page. Edit (⌘E) to copy text.
                   .selectable(false)
                   .on_link_click((url, cx) => this.link(url, cx)),
               ),
           )
-          .child(Scrollbar.vertical(`sl-note-${this.note}`).mode("always").absolute().inset_0()),
+          .child(Scrollbar.vertical(`sl-note-${tag}`).mode("always").absolute().inset_0()),
       )
       .when(this.text === null, (el) => el.child(div().px(26).pt(16).text_size(12).text_color(C.gray).child(this.status || "Loading the vault…")))
       .on_mouse_down("left", (_e, cx) => {
@@ -929,6 +955,7 @@ export default class Notes {
         if (e.keystroke === "cmd-s" && this.editor) cx.spawn((cx) => this.save(cx, true));
         else if (e.keystroke === "cmd-n") this.startNew(cx);
         else if (e.keystroke === "cmd-r") this.pull(cx);
+        else if (e.keystroke === "cmd-shift-e" && this.editor) this.setPreview(!this.preview, cx);
         else if (e.keystroke === "escape" && this.naming) this.cancelNew(cx);
         else if (e.keystroke === "cmd-e") this.editor ? cx.spawn((cx) => this.save(cx)) : this.edit(cx);
         else if (e.keystroke === "cmd-[") this.go(this.back, this.fwd, cx);
