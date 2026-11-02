@@ -25,6 +25,22 @@ const BAR = 15;
 const SIDE = 210;
 const ROW = 20;
 const RESCAN = 4000;
+// Text mode's editor colors: the page's ink, Markdown's marks faded, links and code in Aqua's
+// link blue and a quiet grey (which captures a mark falls in is the highlighter's choice).
+const TEXT_SYNTAX = {
+  punctuation: "#b4b4b4",
+  operator: "#b4b4b4",
+  comment: "#9a9a9a",
+  keyword: "#1d1d1d",
+  function: "#1d1d1d",
+  type: "#1d1d1d",
+  variable: "#1d1d1d",
+  constant: "#1d1d1d",
+  number: "#1d1d1d",
+  boolean: "#1d1d1d",
+  string: "#2a5db0",
+  "string.escape": "#9a9a9a",
+};
 // Pulls the vault ($1) and prints how many notes changed; exit 4 when it isn't a git repo.
 // No prompts (a password would hang it), and a failed rebase is undone; git's fatal or error line says why.
 const PULL = `cd "$1" || exit 3
@@ -129,7 +145,10 @@ export default class Notes {
     this.back = [];
     this.fwd = [];
     this.editor = null; // an EditorState while editing
-    this.preview = false; // while editing: the edit shown formatted instead of as Markdown
+    // While editing: "markdown" (Monaco, the marks in color), "text" (the page's font, the marks
+    // faded) or "preview" (the edit drawn formatted). Markdown and Text each keep an editor.
+    this.mode = null;
+    this.editors = null;
     this.previewMd = null;
     this.status = "";
     this.sticky = false; // a status that stays until the next note is shown
@@ -259,13 +278,23 @@ export default class Notes {
     });
   }
 
-  /** While editing, the Markdown | Preview switch (⇧⌘E): the edit shown formatted, unsaved,
-   *  and back to its Markdown as it was left. */
-  setPreview(on, cx) {
-    if (!this.editor || on === this.preview) return;
-    // Rendered once per switch, not per frame (a long note's wikify is a redraw's time).
-    if (on) this.previewMd = wikify(this.editor.value());
-    this.preview = on;
+  /** While editing, the Markdown | Text | Preview switch. Markdown and Text each keep their
+   *  editor (and its cursor), handed the edit on each switch; Preview draws the edit formatted,
+   *  unsaved. ⇧⌘E flips between Preview and the editing mode used last. */
+  setMode(mode, cx) {
+    if (!this.editor || mode === this.mode) return;
+    if (mode === "preview") {
+      // Rendered once per switch, not per frame (a long note's wikify is a redraw's time).
+      this.previewMd = wikify(this.editor.value());
+    } else {
+      const value = this.editor.value();
+      let ed = this.editors[mode];
+      if (!ed) ed = this.editors[mode] = this.editorFor(mode, value);
+      else if (ed.value() !== value) ed.set_value(value);
+      this.editor = ed;
+      KEEP.editMode = mode;
+    }
+    this.mode = mode;
     cx.notify();
   }
 
@@ -456,24 +485,44 @@ export default class Notes {
     if (this.text === null) return;
     this.clearStatus();
     this.dirty = false;
-    this.preview = false;
-    this.editor = EditorState.new({
+    // Opens in the editing mode used last.
+    this.mode = KEEP.editMode === "text" ? "text" : "markdown";
+    this.editors = { [this.mode]: this.editorFor(this.mode, this.text) };
+    this.editor = this.editors[this.mode];
+    cx.notify();
+  }
+
+  /** An editor for Markdown (Monaco 13, the theme's colors) or Text (Lucida Grande 14 on the
+   *  page's ink, the Markdown marks faded: it reads like the note while you type). */
+  editorFor(mode, value) {
+    const text = mode === "text";
+    const ed = EditorState.new({
       language: "markdown",
-      value: this.text,
+      value,
       soft_wrap: true,
       line_numbers: false,
       folding: false,
-      font_family: "Monaco",
-      font_size: 13,
+      font_family: text ? FONT : "Monaco",
+      font_size: text ? 14 : 13,
+      ...(text ? { syntax: TEXT_SYNTAX } : {}),
     });
     // Compared on change, not per frame.
-    this.editor.on("change", (_e, cx) => {
-      const dirty = this.editor ? this.editor.value() !== this.text : false;
+    ed.on("change", (_e, cx) => {
+      if (ed !== this.editor) return;
+      const dirty = ed.value() !== this.text;
       if (dirty === this.dirty) return;
       this.dirty = dirty;
       cx.notify();
     });
-    cx.notify();
+    return ed;
+  }
+
+  releaseEditors() {
+    for (const ed of Object.values(this.editors ?? {})) ed.release();
+    this.editors = null;
+    this.editor = null;
+    this.mode = null;
+    this.previewMd = null;
   }
 
   /** Saves an edit and leaves Edit mode (or stays in it, for ⌘S); true when nothing is left
@@ -494,10 +543,7 @@ export default class Notes {
     }
     this.dirty = false;
     if (!stay) {
-      this.editor.release();
-      this.editor = null;
-      this.preview = false;
-      this.previewMd = null;
+      this.releaseEditors();
       this.focus.focus();
     }
     cx.notify();
@@ -640,8 +686,9 @@ export default class Notes {
           .when(editing, (el) =>
             el.child(
               textured([
-                { id: "n-src", text: "Markdown", w: 76, on: !this.preview, tooltip: "Edit the Markdown (⇧⌘E switches)", onClick: (_e, cx) => this.setPreview(false, cx) },
-                { id: "n-pre", text: "Preview", w: 64, on: this.preview, tooltip: "See this edit formatted, before saving (⇧⌘E switches)", onClick: (_e, cx) => this.setPreview(true, cx) },
+                { id: "n-src", text: "Markdown", w: 76, on: this.mode === "markdown", tooltip: "Edit the Markdown, its marks in color", onClick: (_e, cx) => this.setMode("markdown", cx) },
+                { id: "n-txt", text: "Text", w: 46, on: this.mode === "text", tooltip: "Edit in the page's font, the Markdown marks faded", onClick: (_e, cx) => this.setMode("text", cx) },
+                { id: "n-pre", text: "Preview", w: 64, on: this.mode === "preview", tooltip: "See this edit formatted, before saving (⇧⌘E)", onClick: (_e, cx) => this.setMode("preview", cx) },
               ]),
             ),
           )
@@ -831,7 +878,7 @@ export default class Notes {
 
   page() {
     // Edit keeps the white page and its padding; its Preview draws the edit as a note is drawn.
-    if (this.editor && !this.preview)
+    if (this.editor && this.mode !== "preview")
       return div()
         .id("n-edit-area")
         .flex_1()
@@ -955,7 +1002,7 @@ export default class Notes {
         if (e.keystroke === "cmd-s" && this.editor) cx.spawn((cx) => this.save(cx, true));
         else if (e.keystroke === "cmd-n") this.startNew(cx);
         else if (e.keystroke === "cmd-r") this.pull(cx);
-        else if (e.keystroke === "cmd-shift-e" && this.editor) this.setPreview(!this.preview, cx);
+        else if (e.keystroke === "cmd-shift-e" && this.editor) this.setMode(this.mode === "preview" ? (KEEP.editMode === "text" ? "text" : "markdown") : "preview", cx);
         else if (e.keystroke === "escape" && this.naming) this.cancelNew(cx);
         else if (e.keystroke === "cmd-e") this.editor ? cx.spawn((cx) => this.save(cx)) : this.edit(cx);
         else if (e.keystroke === "cmd-[") this.go(this.back, this.fwd, cx);
@@ -996,6 +1043,6 @@ export default class Notes {
   }
 
   async close() {
-    this.editor?.release();
+    this.releaseEditors();
   }
 }
