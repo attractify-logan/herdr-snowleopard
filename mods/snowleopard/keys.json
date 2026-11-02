@@ -1,0 +1,12 @@
+{
+  "layout:snowleopard": {
+    "ctrl-f2": "snowleopard.menus",
+    "cmd-alt-escape": "snowleopard.forcequit",
+    "cmd-m": "window.minimize",
+    "ctrl-cmd-f": "snowleopard.fullscreen",
+    "f2": "snowleopard.renametab",
+    "shift-f2": "snowleopard.renamespace",
+    "cmd-t": "snowleopard.newtab",
+    "cmd-w": "snowleopard.closetab"
+  }
+}

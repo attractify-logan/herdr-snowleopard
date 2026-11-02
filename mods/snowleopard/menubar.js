@@ -7,11 +7,11 @@ import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import {
   spaces, agents, machines, layouts, shared, settings, home, run, knownAgents, focused, updates,
-  window as appWindow,
+  window as appWindow, exec,
 } from "herdr";
 import {
-  C, FONT, GLYPH, ICON, paint, rrect, vgrad, fillGrad, openMenu, closeMenus, shortcut, shown, plural, torn, tabInfo, canTear, remoteSpaceItems, pref, openSheet,
-  fitFrame, STATUS_WORD, takeAskMark,
+  C, FONT, GLYPH, ICON, pill, paint, rrect, vgrad, fillGrad, openMenu, closeMenus, menuSize, shortcut, shown, plural, torn, tabInfo, canTear, remoteSpaceItems, pref, openSheet,
+  fitFrame, takeAskMark,
 } from "./kit.js";
 
 export const PROFILES = [
@@ -46,18 +46,43 @@ export function userName() {
   return n.charAt(0).toUpperCase() + n.slice(1);
 }
 
+// The account's full name (`id -F`), asked once; the folder name stands in until then.
+let FULL_NAME = null;
 
-/** Every agent, as menu rows that focus it. */
+function fullName() {
+  return FULL_NAME || userName();
+}
+
+// Agents menu sections, most urgent first.
+const SECTIONS = [["blocked", "Needs You"], ["done", "Done"], ["working", "Working"], ["idle", "Idle"]];
+
+/** Every agent, as menu rows that focus it, under gray status headers. */
 export function agentItems() {
   const list = agents();
   if (!list.length) return [{ label: "No agents running", disabled: true }];
-  return list.map((a) => ({
-    label: a.tab_name && a.tab_name !== String(a.tab_index) ? a.tab_name : a.program?.name ?? "Agent",
-    detail: `${a.space_name} · ${STATUS_WORD[a.status] ?? a.status}`,
-    icon: a.program?.icon && !a.program.tint ? a.program.icon : null,
-    checked: a.focused,
-    act: { run: ["agent.focus", { terminal: a.address }] },
-  }));
+  const sp = spaces();
+  const row = (a) => {
+    const machine = sp.find((s) => s.id === a.space)?.machine;
+    return {
+      label: a.tab_name && a.tab_name !== String(a.tab_index) ? a.tab_name : a.program?.name ?? "Agent",
+      detail: machine ? `${a.space_name} on ${machine}` : a.space_name,
+      icon: a.program?.icon && !a.program.tint ? a.program.icon : null,
+      checked: a.focused,
+      act: { run: ["agent.focus", { terminal: a.address }] },
+    };
+  };
+  const out = [];
+  const waiting = list.filter((a) => a.status === "blocked").sort((a, b) => a.seq - b.seq);
+  if (waiting.length) out.push({ label: "Go to Next Agent That Needs You", act: { run: ["agent.focus", { terminal: waiting[0].address }] } });
+  for (const [status, title] of SECTIONS) {
+    // Oldest first for the ones waiting on you.
+    const rows = list.filter((a) => a.status === status);
+    if (status === "blocked" || status === "done") rows.sort((a, b) => a.seq - b.seq);
+    if (!rows.length) continue;
+    if (out.length) out.push({ sep: true });
+    out.push({ label: title, header: true }, ...rows.map(row));
+  }
+  return out;
 }
 
 export default class MenuBar {
@@ -68,6 +93,12 @@ export default class MenuBar {
     cx.timer.every(1000, () => fitFrame());
     this.now = new Date();
     this.agentsToRun = [];
+    exec("id", ["-F"])
+      .then((r) => {
+        const n = r.stdout.trim();
+        if (r.code === 0 && n) FULL_NAME = n;
+      })
+      .catch(() => {});
     const tick = (cx) => {
       this.now = new Date();
       cx.notify();
@@ -109,7 +140,7 @@ export default class MenuBar {
           { label: "Restart…", disabled: !u?.app?.ready, act: { run: ["app.update"] } },
           { label: "Shut Down…", act: { sheet: ["confirm", { title: "Are you sure you want to quit Herdr?", detail: "Your terminals and agents keep running in herdr-core and will be here when you come back.", yes: "Shut Down", command: { name: "app.quit" } }] } },
           { sep: true },
-          { label: `Log Out ${userName()}…`, act: { run: ["window.close"] } },
+          { label: `Log Out ${fullName()}…`, act: { sheet: ["confirm", { title: "Close the Herdr window?", detail: "Your agents keep running.", yes: "Log Out", command: { name: "window.close" } }] } },
         ];
       }
       case "app":
@@ -200,9 +231,9 @@ export default class MenuBar {
           { label: "Move Tab to New Window", disabled: !cur || !canTear(cur.id), act: { tearOff: cur?.id } },
           { label: "Merge All Windows", disabled: !wins.length, act: { mergeAll: true } },
           { sep: true },
+          ...(tabs.length ? [{ label: s?.name ?? "Tabs", header: true }] : []),
           ...tabs.map((t) => ({
             label: t.name,
-            detail: s?.name,
             checked: t.active,
             shortcut: t.index <= 9 ? sc(`tab.select:${t.index}`) : "",
             act: { run: ["tab.select", { id: t.id }] },
@@ -225,7 +256,6 @@ export default class MenuBar {
         ];
       case "agents":
         return [
-          { label: "Agents", header: true },
           ...agentItems(),
           { sep: true },
           { label: "Next Agent", shortcut: sc("agent.next"), act: { run: ["agent.next"] } },
@@ -236,7 +266,7 @@ export default class MenuBar {
         const word = { ready: "Connected", loading: "Connecting…", unavailable: "Unavailable" };
         return [
           { label: "Machines", header: true },
-          ...ms.map((m) => ({ label: m.name ?? "This Mac", detail: word[m.layout] ?? m.layout, checked: m.layout === "ready", disabled: m.layout !== "ready" })),
+          ...ms.map((m) => ({ label: m.name ?? "This Mac", detail: word[m.layout] ?? m.layout, bead: m.layout === "ready" ? "zoom" : m.layout === "loading" ? "min" : "red", disabled: m.layout !== "ready" })),
           { sep: true },
           { label: "Open Machines Preferences…", act: { run: ["app.settings", { section: "machines" }] } },
         ];
@@ -244,8 +274,6 @@ export default class MenuBar {
       case "clock":
         return [
           { label: `${LONG_DAYS[this.now.getDay()]}, ${MONTHS[this.now.getMonth()]} ${this.now.getDate()}, ${this.now.getFullYear()}`, disabled: true },
-          { sep: true },
-          { label: "Open Alerts Preferences…", act: { run: ["app.settings", { section: "alerts" }] } },
         ];
       case "user":
         return [
@@ -261,24 +289,29 @@ export default class MenuBar {
   open(name, bounds) {
     const m = shared("sl.menu");
     if (m?.id) closeMenus();
-    const right = ["agents", "machines", "clock", "user"].includes(name);
+    const extra = ["agents", "machines", "clock", "user"].includes(name);
     const items = this.menu(name);
-    const at = bounds ? { x: right ? Math.max(0, bounds.x + bounds.width - 220) : bounds.x, y: 22 } : undefined;
-    // Right-side menus hang from their right edge: size them to know where that is.
-    openMenu(items, at && right ? this.rightAt(items, bounds) : at, { owner: name, attached: true });
-  }
-
-  rightAt(items, bounds) {
-    const longest = items.reduce((n, it) => Math.max(n, (it.label ?? "").length + (it.detail ? it.detail.length * 0.85 + 2 : 0)), 0);
-    const w = Math.max(172, 46 + longest * 7.3);
-    return { x: Math.max(0, bounds.x + bounds.width - w), y: 22 };
+    // A menu extra's menu opens left-aligned under it, shifted left only at the screen edge.
+    let x = bounds.x;
+    if (extra) {
+      // The extras end at the window's right edge: the title's x plus the widths from it on (Spotlight is 30).
+      const order = ["agents", "machines", "clock", "user"];
+      const edge = order.slice(order.indexOf(name)).reduce((n, k) => n + (this.widths[k] ?? 0), bounds.x + 30);
+      x = Math.max(0, Math.min(bounds.x, edge - menuSize(items).w - 4));
+    }
+    openMenu(items, bounds ? { x, y: 22 } : undefined, { owner: name, attached: true });
   }
 
   /** Key commands: "apple", "app", "file", ... open that menu (Ctrl-F2 walks them, as in Aqua). */
   command(c) {
     const order = ["apple", "app", "file", "edit", "view", "window", "help"];
     let name = c;
-    if (c === "menus") {
+    // Left and right in an open menu: its neighbour on the bar.
+    if (c === "menuprev" || c === "menunext") {
+      const i = order.indexOf(shared("sl.menu")?.owner);
+      if (i < 0) return true;
+      name = order[(i + (c === "menunext" ? 1 : order.length - 1)) % order.length];
+    } else if (c === "menus") {
       const cur = shared("sl.menu");
       const i = order.indexOf(cur?.id ? cur.owner : null);
       name = order[(i + 1) % order.length];
@@ -357,21 +390,8 @@ export default class MenuBar {
       });
   }
 
-  render(cx) {
-    this.askNames(cx);
-    const list = agents();
-    const working = list.filter((a) => a.status === "working").length;
-    const blocked = list.filter((a) => a.status === "blocked").length;
-    const ms = machines();
-    const allUp = ms.every((m) => m.layout === "ready");
-    const glyph = (path, on, w = 16, h = 16, dim = false) => svg(path).w(w).h(h).text_color(on ? "#ffffff" : dim ? "#00000059" : "#000000");
-    const agentsExtra = (on) =>
-      h_flex()
-        .items_center()
-        .gap(4)
-        .child(blocked ? div().w(8).h(8).rounded(4).bg(on ? "#ffffff" : C.red).loop("opacity", { from: 0.35, to: 1, period: 1100 }) : div())
-        .child(working ? svg(GLYPH.spinner).w(15).h(15).text_color(on ? "#ffffff" : "#222222").spin(900) : glyph(GLYPH.agents, on))
-        .when(working + blocked > 0, (el) => el.child(div().text_size(13).child(String(working + blocked))));
+  /** The bar: the gradient and its two edge lines. */
+  bar() {
     return h_flex()
       .id("menubar")
       .relative()
@@ -381,14 +401,19 @@ export default class MenuBar {
       .text_color(C.text)
       .child(fillGrad(C.barTop, C.barBot))
       .child(div().absolute().top(0).left(0).w_full().h(1).bg("#ffffffa0"))
-      .child(div().absolute().bottom(0).left(0).w_full().h(1).bg(C.barLine))
+      .child(div().absolute().bottom(0).left(0).w_full().h(1).bg(C.barLine));
+  }
+
+  render(cx) {
+    this.askNames(cx);
+    return this.bar()
       .child(
         h_flex()
           .relative()
           .h_full()
           .pl(10)
           .items_center()
-          .child(this.title("apple", (on) => div().font_family(FONT).text_size(17).text_color(on ? "#ffffff" : "#1b1b1b").child(""), { px: 10 }))
+          .child(this.title("apple", (on) => div().font_family(FONT).text_size(17).text_color(on ? "#ffffff" : "#1b1b1b").child("\uf8ff"), { px: 10 }))
           .child(this.title("app", "Herdr", { bold: true }))
           .child(this.title("file", "File"))
           .child(this.title("edit", "Edit"))
@@ -397,15 +422,33 @@ export default class MenuBar {
           .child(this.title("help", "Help")),
       )
       .child(div().flex_1())
-      .child(
-        h_flex()
+      .child(this.extras());
+  }
+
+  /** The right of the bar: the agents and machines extras, the clock, the user and Spotlight. */
+  extras() {
+    const list = agents();
+    const working = list.filter((a) => a.status === "working").length;
+    const blocked = list.filter((a) => a.status === "blocked").length;
+    const ms = machines();
+    const allUp = ms.every((m) => m.layout === "ready");
+    const glyph = (path, on, w = 16, h = 16, dim = false) => svg(path).w(w).h(h).text_color(on ? "#ffffff" : dim ? "#00000059" : "#000000");
+    // Who needs you is a red pill with the count; a spinner alone says something is working.
+    const agentsExtra = (on) =>
+      h_flex()
+        .items_center()
+        .gap(4)
+        .when(blocked > 0, (el) => el.child(pill(blocked, { color: C.red, selected: on })))
+        .when(working > 0, (el) => el.child(svg(GLYPH.spinner).w(15).h(15).text_color(on ? "#ffffff" : "#222222").spin(900)))
+        .when(working + blocked === 0, (el) => el.child(glyph(GLYPH.agents, on)));
+    return h_flex()
           .relative()
           .h_full()
           .items_center()
           .child(this.title("agents", agentsExtra, { px: 7 }))
           .when(ms.length > 1, (el) => el.child(this.title("machines", (on) => glyph(GLYPH.wifi, on, 16, 14, !allUp), { px: 7 })))
           .child(this.title("clock", clock(this.now), { px: 8 }))
-          .child(this.title("user", userName(), { px: 8 }))
+          .child(this.title("user", fullName(), { px: 8 }))
           .child(
             div()
               .id("spotlight")
@@ -424,7 +467,6 @@ export default class MenuBar {
                 closeMenus();
                 run("app.palette");
               }),
-          ),
-      );
+          );
   }
 }

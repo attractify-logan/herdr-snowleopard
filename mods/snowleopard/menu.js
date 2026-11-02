@@ -5,13 +5,17 @@
 
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { props, closeOverlay, shared, setShared } from "herdr";
-import { C, FONT, MENU, GLYPH, paint, rrect, vgrad, perform } from "./kit.js";
+import { props, closeOverlay, shared, setShared, run } from "herdr";
+import { C, FONT, MENU, GLYPH, paint, rrect, vgrad, perform, bead } from "./kit.js";
 
 export default class Menu {
   init(_p, cx) {
     this.at = -1;
     this.size = null;
+    this.typed = "";
+    this.typedAt = 0;
+    this.openedAt = Date.now();
+    this.gone = false;
     this.focus = cx.focus_handle();
     this.focus.focus();
   }
@@ -31,8 +35,21 @@ export default class Menu {
     closeOverlay(p.overlay);
   }
 
+  /** The menu body's size: the popup less its shadow margins. */
+  body() {
+    const sh = MENU.shadow;
+    const l = props()?.lpad ?? sh;
+    return { w: Math.max(0, (this.size?.width ?? 0) - l - sh), h: Math.max(0, (this.size?.height ?? 0) - sh), l };
+  }
+
+  /** Does any row carry an icon? Then every row's text starts after the icon column. */
+  lead() {
+    return this.items().some((it) => it.icon) ? 40 : 22;
+  }
+
   choose(it) {
-    if (!this.pickable(it)) return;
+    if (!this.pickable(it) || this.gone) return;
+    this.gone = true;
     this.done();
     perform(it.act);
   }
@@ -55,23 +72,49 @@ export default class Menu {
       case "up":
         this.move(-1);
         break;
+      case "left":
+      case "right":
+        // As in Aqua, the arrows walk to the neighbouring menu of the bar.
+        if (props()?.attached) run("snowleopard." + (e.key === "left" ? "menuprev" : "menunext"));
+        break;
       case "enter":
       case "space":
+        if (e.key === "space" && this.typed && Date.now() - this.typedAt < 1000) {
+          this.typeSelect(" ");
+          break;
+        }
         this.choose(this.items()[this.at]);
         break;
       case "escape":
         this.done();
         break;
       default: {
-        // Type-select: the first item starting with the letter.
         const ch = (e.key_char ?? e.key ?? "").toLowerCase();
         if (ch.length !== 1) return;
-        const i = this.items().findIndex((it) => this.pickable(it) && (it.label ?? "").toLowerCase().startsWith(ch));
-        if (i >= 0) this.at = i;
+        this.typeSelect(ch);
       }
     }
     cx.stop_propagation();
     cx.notify();
+  }
+
+  /** Type-select, as NSMenu does: letters typed within a second add up, and the
+   *  search runs forward from the highlighted item, wrapping round. */
+  typeSelect(ch) {
+    const now = Date.now();
+    this.typed = now - this.typedAt < 1000 ? this.typed + ch : ch;
+    this.typedAt = now;
+    const items = this.items();
+    // The same letter again ("s s") steps on to the next item starting with it.
+    const word = this.typed.length > 1 && [...this.typed].every((c) => c === ch) ? ch : this.typed;
+    const from = word.length > 1 ? this.at : this.at + 1;
+    for (let n = 0; n < items.length; n++) {
+      const i = (from + n + items.length) % items.length;
+      if (this.pickable(items[i]) && (items[i].label ?? "").toLowerCase().startsWith(word)) {
+        this.at = i;
+        return;
+      }
+    }
   }
 
   row(it, i) {
@@ -80,15 +123,16 @@ export default class Menu {
       return h_flex()
         .flex_none()
         .h(MENU.header)
-        .pl(10)
+        .pl(this.lead())
         .items_center()
-        .text_color(C.disabled)
-        .text_size(13)
+        .text_color("#7f7f7f")
+        .text_size(12)
         .child(it.label);
     const on = i === this.at && !it.disabled;
     const fg = it.disabled ? C.disabled : on ? "#ffffff" : C.text;
+    const bw = this.body().w;
     const lead = div()
-      .w(it.icon ? 40 : 22)
+      .w(this.lead())
       .flex_none()
       .flex()
       .items_center()
@@ -96,6 +140,7 @@ export default class Menu {
       .pr(it.icon ? 6 : 6)
       .gap(4)
       .when(Boolean(it.checked), (el) => el.child(svg(GLYPH.check).w(10).h(10).text_color(fg)))
+      .when(Boolean(it.bead), (el) => el.child(bead(it.bead, 10)))
       .when(Boolean(it.icon), (el) => el.child(image(it.icon).w(16).h(16).flex_none()));
     return h_flex()
       .id(`mi-${i}`)
@@ -107,7 +152,7 @@ export default class Menu {
       .text_color(fg)
       .when(on, (el) =>
         el
-          .child(div().absolute().top(0).left(0).size_full().child(paint(rrect(this.size?.width ?? 300, MENU.row, 0), vgrad(C.selTop, C.selBot), this.size?.width ?? 300, MENU.row)))
+          .child(div().absolute().top(0).left(0).size_full().child(paint(rrect(bw || 300, MENU.row, 0), vgrad(C.selTop, C.selBot), bw || 300, MENU.row)))
           .child(div().absolute().top(0).left(0).w_full().h(1).bg(C.selLine)),
       )
       .on_mouse_move((_e, cx) => {
@@ -116,6 +161,11 @@ export default class Menu {
         cx.notify();
       })
       .on_click(() => this.choose(it))
+      // Press on the title, drag down and let go on an item: choose it, unless
+      // the release comes right after the menu opened (a plain click).
+      .on_mouse_up("left", () => {
+        if (Date.now() - this.openedAt > 250) this.choose(it);
+      })
       .child(lead.relative())
       .child(
         h_flex()
@@ -133,8 +183,10 @@ export default class Menu {
   render(_cx) {
     const p = props() ?? {};
     const items = this.items();
-    const w = this.size?.width ?? 0;
-    const h = this.size?.height ?? 0;
+    const { w, h, l } = this.body();
+    const sh = MENU.shadow;
+    const W = this.size?.width ?? 0;
+    const H = this.size?.height ?? 0;
     // Hanging from the menu bar: square top corners. Popped up: round all four.
     const r = p.attached ? [0, 0, 5, 5] : [5, 5, 5, 5];
     return v_flex()
@@ -152,21 +204,40 @@ export default class Menu {
       })
       .relative()
       .size_full()
+      .pl(l)
+      .pr(sh)
+      .pb(sh)
       .font_family(FONT)
       .text_size(14)
       .text_color(C.text)
+      // A soft shadow: three translucent rounded rectangles, wider and fainter outward.
       .when(w > 0, (el) =>
-        el
-          .child(paint(rrect(w, h, r), C.menuEdge, w, h))
-          .child(paint(rrect(w - 2, h - 2, r.map((n) => (n ? n - 1 : 0)), 1, p.attached ? 0 : 1), C.menu, w, h)),
+        [[6, "#00000010"], [4, "#00000018"], [2, "#00000028"]].reduce(
+          (acc, [e, c]) => {
+            const x = Math.max(0, l - e);
+            const rr = p.attached ? [0, 0, 5 + e, 5 + e] : [5 + e, 5 + e, 5 + e, 5 + e];
+            return acc.child(paint(rrect(w + 2 * e, Math.min(h + e + 2, H), rr, x, p.attached ? 0 : Math.max(0, 2 - e)), c, W, H));
+          },
+          el,
+        ),
       )
       .child(
         v_flex()
           .relative()
           .size_full()
-          .py(MENU.pad)
-          .px(1)
-          .children(items.map((it, i) => this.row(it, i))),
+          .when(w > 0, (el) =>
+            el
+              .child(paint(rrect(w, h, r), C.menuEdge, w, h))
+              .child(paint(rrect(w - 2, h - 2, r.map((n) => (n ? n - 1 : 0)), 1, p.attached ? 0 : 1), C.menu, w, h)),
+          )
+          .child(
+            v_flex()
+              .relative()
+              .size_full()
+              .py(MENU.pad)
+              .px(1)
+              .children(items.map((it, i) => this.row(it, i))),
+          ),
       );
   }
 

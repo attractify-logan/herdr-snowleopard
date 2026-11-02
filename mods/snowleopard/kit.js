@@ -657,8 +657,10 @@ function pretty(chord) {
   let k = parts.pop();
   if (k === "" && parts.length) k = "-";
   const mods = new Set(parts);
-  const name = KEYNAME[k] ?? (k.length === 1 ? k.toUpperCase() : k.toUpperCase().replace(/^F(\d+)$/, "F$1"));
-  return `${mods.has("ctrl") ? "⌃" : ""}${mods.has("alt") ? "⌥" : ""}${mods.has("shift") ? "⇧" : ""}${mods.has("cmd") ? "⌘" : ""}${name}`;
+  // A Mac prints shift-/ as ?, with no shift glyph.
+  const q = k === "/" && mods.has("shift");
+  const name = q ? "?" : KEYNAME[k] ?? (k.length === 1 ? k.toUpperCase() : k.toUpperCase().replace(/^F(\d+)$/, "F$1"));
+  return `${mods.has("ctrl") ? "⌃" : ""}${mods.has("alt") ? "⌥" : ""}${mods.has("shift") && !q ? "⇧" : ""}${mods.has("cmd") ? "⌘" : ""}${name}`;
 }
 
 /** The shortcut bound to an action (global, this layout's or the terminal's), e.g. "⇧⌘D", or "". */
@@ -676,7 +678,8 @@ export function shortcut(action) {
     // The layout's own binding wins over a global one for the same action.
     for (const k of keys() ?? []) {
       if (!ok(k.section) || String(k.keys).includes(" ")) continue;
-      if (!CHORDS.has(k.action) || k.section === "layout:snowleopard") CHORDS.set(k.action, pretty(String(k.keys)));
+      // An action bound to both / and shift-/ prints the shifted one (⌘?).
+      if (!CHORDS.has(k.action) || k.section === "layout:snowleopard" || String(k.keys).endsWith("shift-/")) CHORDS.set(k.action, pretty(String(k.keys)));
     }
   }
   return CHORDS.get(action) ?? "";
@@ -685,7 +688,7 @@ export function shortcut(action) {
 // ---- menus and sheets
 
 // Menu metrics; the menu role draws exactly these.
-export const MENU = { row: 20, header: 20, sep: 12, pad: 5 };
+export const MENU = { row: 20, header: 20, sep: 12, pad: 5, shadow: 8 };
 
 /** A menu's size in px for its items. */
 export function menuSize(items, min = 0) {
@@ -701,7 +704,9 @@ export function menuSize(items, min = 0) {
     longest = Math.max(longest, (it.label ?? "").length + (it.detail ? it.detail.length * 0.85 + 2 : 0));
     keys = Math.max(keys, (it.shortcut ?? "").length);
   }
-  const w = Math.max(min, 172, 46 + longest * 7.3 + (keys ? 26 + keys * 10 : 0));
+  // A shortcut glyph is about 13 px wide, with a 36 px gutter before it; an icon column adds 18.
+  const icons = items.some((it) => it.icon) ? 18 : 0;
+  const w = Math.max(min, 172, 46 + icons + longest * 7.3 + (keys ? 36 + keys * 13 : 0));
   return { w: Math.ceil(w), h };
 }
 
@@ -712,14 +717,17 @@ export function menuSize(items, min = 0) {
  */
 export function openMenu(items, at, o = {}) {
   const { w, h } = menuSize(items, o.minWidth ?? 0);
+  // The popup is MENU.shadow larger on the left, right and bottom, for the drop shadow.
+  const sh = MENU.shadow;
+  const left = at ? Math.max(0, at.x - sh) : 0;
   const id = openOverlay({
     mod: "snowleopard",
     kind: "popup",
     frame: "none",
-    width: w,
-    height: h,
-    ...(at ? { at } : {}),
-    props: { role: "menu", items, owner: o.owner ?? null, attached: Boolean(o.attached) },
+    width: w + sh * 2,
+    height: h + sh,
+    ...(at ? { at: { x: left, y: at.y } } : {}),
+    props: { role: "menu", items, owner: o.owner ?? null, attached: Boolean(o.attached), lpad: at ? at.x - left : sh },
   });
   setShared("sl.menu", { owner: o.owner ?? null, id });
   return id;
