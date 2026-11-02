@@ -36,6 +36,8 @@ export default class Sheet {
       this.dontAsk = false;
       this.input = InputState.new({ value: start });
       this.input.on("submit", () => this.doRename());
+      // Redraw as the field empties or fills, so the grey name hides once typing starts.
+      this.input.on("change", (_e, cx) => cx.notify());
       const focus = () => {
         this.input.focus();
         // Like Finder: the old name opens selected, so typing replaces it.
