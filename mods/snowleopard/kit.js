@@ -76,6 +76,7 @@ export const GLYPH = {
   search: `${A}/icons/search.svg`,
   gear: `${A}/icons/gear.svg`,
   plus: `${A}/icons/plus.svg`,
+  refresh: `${A}/icons/refresh.svg`,
   left: `${A}/icons/chevron-left.svg`,
   right: `${A}/icons/chevron-right.svg`,
   down: `${A}/icons/chevron-down.svg`,

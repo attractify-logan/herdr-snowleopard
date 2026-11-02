@@ -25,6 +25,18 @@ const BAR = 15;
 const SIDE = 210;
 const ROW = 20;
 const RESCAN = 4000;
+// Pulls the vault ($1) and prints how many notes changed; exit 4 when it isn't a git repo.
+// No prompts (a password would hang it), and a failed rebase is undone; git's fatal or error line says why.
+const PULL = `cd "$1" || exit 3
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 4
+export GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="\${GIT_SSH_COMMAND:-ssh} -o BatchMode=yes"
+b=$(git rev-parse HEAD 2>/dev/null)
+if ! out=$(git pull --rebase --autostash 2>&1); then
+  git rebase --abort >/dev/null 2>&1
+  printf '%s\\n' "$out" | grep -m1 -E '^(fatal|error):' || printf '%s\\n' "$out" | grep -v '^hint:' | grep . | tail -1
+  exit 1
+fi
+git diff --name-only "$b" HEAD -- '*.md' 2>/dev/null | wc -l | tr -d ' '`;
 
 /** Obsidian's [[links]] and ![[embeds]] as Markdown links this window follows; front matter
  *  off. Code blocks and code spans are left as written. */
@@ -242,6 +254,39 @@ export default class Notes {
       } finally {
         this.rescanning = 0;
       }
+    });
+  }
+
+  /** The Refresh button (⌘R): pulls the vault when it's a git repo (as Obsidian Git's Pull
+   *  does: local changes are stashed around a rebase, and a pull that fails is undone), then
+   *  rereads it. A vault without git is just reread. Never while a note is being edited. */
+  pull(cx) {
+    if (!this.vault) return;
+    if (this.pulling && Date.now() - this.pulling < 60000) return;
+    if (this.editor) return this.say("Click Done first, then get new notes.", cx);
+    this.pulling = Date.now();
+    this.status = "Getting new notes…";
+    this.sticky = true;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      let words = "";
+      let stuck = false;
+      try {
+        const r = await exec("/bin/sh", ["-c", PULL, "sh", this.vault]);
+        const out = r.stdout.trim();
+        if (r.code === 4) words = "Reread the vault (it isn't a git repo).";
+        else if (r.code !== 0) {
+          words = `Couldn't pull: ${out || r.stderr.trim() || `git stopped (${r.code})`}`;
+          stuck = true;
+        } else words = out === "0" ? "Up to date." : out === "1" ? "Got 1 new or changed note." : `Got ${out} new or changed notes.`;
+      } catch (e) {
+        words = `Couldn't pull: ${e}`;
+        stuck = true;
+      }
+      this.pulling = 0;
+      this.rescanning = 0;
+      this.rescan(cx);
+      this.say(words, cx, stuck);
     });
   }
 
@@ -550,6 +595,18 @@ export default class Notes {
             textured([
               { id: "n-back", glyph: GLYPH.left, size: 12, w: 30, tooltip: "Back", onClick: (_e, cx) => this.go(this.back, this.fwd, cx) },
               { id: "n-fwd", glyph: GLYPH.right, size: 12, w: 30, tooltip: "Forward", onClick: (_e, cx) => this.go(this.fwd, this.back, cx) },
+            ]),
+          )
+          .child(
+            textured([
+              {
+                id: "n-pull",
+                glyph: this.pulling ? GLYPH.spinner : GLYPH.refresh,
+                size: 12,
+                w: 34,
+                tooltip: "Get new notes: pulls the vault from git, then rereads it (⌘R)",
+                onClick: (_e, cx) => this.pull(cx),
+              },
             ]),
           )
           .child(textured([{ id: "n-new", glyph: GLYPH.plus, size: 11, w: 34, tooltip: "New note (⌘N)", onClick: (_e, cx) => this.startNew(cx) }]))
@@ -871,6 +928,7 @@ export default class Notes {
       .on_key_down((e, cx) => {
         if (e.keystroke === "cmd-s" && this.editor) cx.spawn((cx) => this.save(cx, true));
         else if (e.keystroke === "cmd-n") this.startNew(cx);
+        else if (e.keystroke === "cmd-r") this.pull(cx);
         else if (e.keystroke === "escape" && this.naming) this.cancelNew(cx);
         else if (e.keystroke === "cmd-e") this.editor ? cx.spawn((cx) => this.save(cx)) : this.edit(cx);
         else if (e.keystroke === "cmd-[") this.go(this.back, this.fwd, cx);
