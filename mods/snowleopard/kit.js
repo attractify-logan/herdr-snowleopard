@@ -286,10 +286,12 @@ export function contextLevels() {
 }
 
 /** An Aqua progress bar: a recessed gray track with a glossy fill, blue, amber
- *  from 70% and red from 85%, as Claude Code's context gauge shows it. */
+ *  from 70% and red from 85%, as Claude Code's context gauge shows it. With
+ *  o.left the fill is what's left, amber from 30% left and red from 15%. */
 export function gauge(pct, w = 34, h = 7, o = {}) {
   const fill = Math.max(0, Math.min(w - 2, Math.round(((w - 2) * pct) / 100)));
-  const [top, bottom] = pct >= 85 ? ["#ff8a74", "#c41606"] : pct >= 70 ? ["#ffd27a", "#d98a06"] : ["#9cc4f6", "#2a64d8"];
+  const used = o.left ? 100 - pct : pct;
+  const [top, bottom] = used >= 85 ? ["#ff8a74", "#c41606"] : used >= 70 ? ["#ffd27a", "#d98a06"] : ["#9cc4f6", "#2a64d8"];
   return div()
     .relative()
     .flex_none()

@@ -441,7 +441,7 @@ export default class MenuBar {
     const ms = machines();
     const allUp = ms.every((m) => m.layout === "ready");
     const glyph = (path, on, w = 16, h = 16, dim = false) => svg(path).w(w).h(h).text_color(on ? "#ffffff" : dim ? "#00000059" : "#000000");
-    // Claude's and Codex's plan usage: each one's icon, a small gauge of its fullest limit, the percent.
+    // Claude's and Codex's plan usage: each one's icon, a small gauge of what's left of its fullest limit, the percent left.
     const u = pref("usage") ? shared("sl.usage") : null;
     const services = [["claude", u?.claude], ["codex", u?.codex]].filter(([, x]) => topPct(x) !== null);
     const usage = services.length > 0;
@@ -456,8 +456,8 @@ export default class MenuBar {
               .items_center()
               .gap(4)
               .child(icons[k] ? programIcon(icons[k], 14, { small: true }) : div().text_size(11).font_weight(700).child(x.name))
-              .child(gauge(topPct(x), 24, 7, { selected: on }))
-              .child(div().text_size(12).text_color(on ? "#ffffff" : C.text).child(`${Math.round(topPct(x))}%`)),
+              .child(gauge(100 - topPct(x), 24, 7, { selected: on, left: true }))
+              .child(div().text_size(12).text_color(on ? "#ffffff" : C.text).child(`${Math.max(0, Math.round(100 - topPct(x)))}%`)),
           ),
         );
     // Who needs you is a red pill with the count; a spinner alone says something is working.

@@ -148,7 +148,7 @@ export function usageIcons() {
   return U.icons;
 }
 
-/** The fullest window of a service: what its gauge shows. */
+/** The fullest window of a service (percent used): its gauge shows what's left of it. */
 export function topPct(s) {
   return s?.windows?.length ? Math.max(...s.windows.map((w) => w.pct)) : null;
 }
@@ -166,7 +166,7 @@ function when(iso) {
   return `resets ${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()]} ${time}`;
 }
 
-/** The usage extra's menu: each service's limits in plain words. */
+/** The usage extra's menu: what's left of each service's limits, in plain words. */
 export function usageItems() {
   const u = shared("sl.usage");
   const items = [];
@@ -174,8 +174,8 @@ export function usageItems() {
     if (!s) continue;
     if (items.length) items.push({ sep: true });
     items.push({ label: s.plan ? `${s.name} (${s.plan})` : s.name, header: true });
-    for (const w of s.windows) items.push({ label: w.label, detail: `${Math.round(w.pct)}% used${w.resets ? `, ${when(w.resets)}` : ""}` });
-    if (s.extra) items.push({ label: "Extra usage", detail: `$${Math.round(s.extra.used)} of $${Math.round(s.extra.limit)}` });
+    for (const w of s.windows) items.push({ label: w.label, detail: `${Math.max(0, Math.round(100 - w.pct))}% left${w.resets ? `, ${when(w.resets)}` : ""}` });
+    if (s.extra) items.push({ label: "Extra usage", detail: `$${Math.max(0, Math.round(s.extra.limit - s.extra.used))} of $${Math.round(s.extra.limit)} left` });
   }
   if (!items.length) items.push({ label: "No Claude or Codex login found", disabled: true });
   items.push({ sep: true });
