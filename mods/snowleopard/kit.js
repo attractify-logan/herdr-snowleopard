@@ -236,6 +236,9 @@ export function bead(kind, size, glyph = null) {
         .justify_center()
         .child(svg(glyph).w(s * 0.5).h(s * 0.5).text_color(c.glyph)),
     );
+  // The traffic lights darken while pressed, as Aqua's do.
+  if (kind === "close" || kind === "min" || kind === "zoom" || kind === "off")
+    el = el.child(div().id(`bead-${kind}`).absolute().top(0).left(0).size_full().rounded_full().active((st) => st.bg("#00000052")));
   return el;
 }
 
@@ -889,9 +892,13 @@ export function zoomed() {
 
 /** The desktop's size (what the window may cover) for an app window of this size. */
 export function desktopLimits(app) {
+  return { w: app.width, h: app.height - MENUBAR - dockHeight() };
+}
+
+/** How much of the app window's bottom the Dock covers (0 while it's hidden). */
+export function dockHeight() {
   const dock = node("dock");
-  const dockH = dock && !dock.hidden ? dock.size?.px ?? 0 : 0;
-  return { w: app.width, h: app.height - MENUBAR - dockH };
+  return dock && !dock.hidden ? dock.size?.px ?? 0 : 0;
 }
 
 /** Where the window is now, in desktop px; h is null while zoomed (the drag works it out). */
@@ -930,13 +937,25 @@ export function fitFrame() {
   fitWindows(v);
 }
 
-/** A floating window's saved size and spot, fitted into the app window (below the menu bar). */
+/** A floating window's saved size and spot, fitted into the desktop (below the menu bar, above
+ *  the Dock); with no spot it's centered, so a window always has one. */
 function fitBox(w, h, at, v = window.viewport_size()) {
   if (!v?.width || !v?.height) return { w, h, at };
+  const floor = v.height - dockHeight();
   const fw = Math.round(Math.min(w, Math.max(WIN.minW, v.width - 8)));
-  const fh = Math.round(Math.min(h, Math.max(WIN.minH, v.height - MENUBAR - 4)));
-  const fat = at ? { x: Math.round(Math.max(0, Math.min(at.x, v.width - fw))), y: Math.round(Math.max(MENUBAR, Math.min(at.y, v.height - fh))) } : at;
-  return { w: fw, h: fh, at: fat, moved: fw !== w || fh !== h || (at && (fat.x !== at.x || fat.y !== at.y)) };
+  const fh = Math.round(Math.min(h, Math.max(WIN.minH, floor - MENUBAR - 4)));
+  const from = at ?? { x: (v.width - fw) / 2, y: MENUBAR + (floor - MENUBAR - fh) / 2 };
+  const fat = { x: Math.round(Math.max(0, Math.min(from.x, v.width - fw))), y: Math.round(Math.max(MENUBAR, Math.min(from.y, floor - fh))) };
+  return { w: fw, h: fh, at: fat, moved: fw !== w || fh !== h || !at || fat.x !== at.x || fat.y !== at.y };
+}
+
+/** A zoomed window's size and spot in px: most of the desktop, centered above the Dock. */
+function bigBox(v = window.viewport_size()) {
+  if (!v?.width || !v?.height) return null;
+  const floor = v.height - dockHeight();
+  const w = Math.round(v.width * WIN.bigW);
+  const h = Math.round((floor - MENUBAR) * WIN.bigH);
+  return { w, h, at: { x: Math.round((v.width - w) / 2), y: Math.round(MENUBAR + (floor - MENUBAR - h) / 2) } };
 }
 
 /** Open floating windows (app windows, torn-off tabs) that hang off the app window: closed
@@ -1073,7 +1092,8 @@ function openTorn(tabId, o = {}) {
   // Zoomed, it opens centered; otherwise where it was.
   const saved = torn()[tabId];
   const fit = fitBox(saved?.w ?? WIN.w, saved?.h ?? WIN.h, o.at ?? saved?.at);
-  const at = o.big ? zoomedSpot() : fit.at;
+  const big = o.big ? bigBox() : null;
+  const at = o.big ? big?.at ?? zoomedSpot() : fit.at;
   const body = terms.length === 1 ? { ...cell(terms[0]), size: { weight: 1 } } : { type: "row", size: { weight: 1 }, divider: { width: 1, color: "#8b8b8b" }, children: terms.map(cell) };
   const overlay = openOverlay({
     kind: "window",
@@ -1081,8 +1101,8 @@ function openTorn(tabId, o = {}) {
     // The zoomed window has its own key: reopening a key keeps its old spot, whatever `at` says.
     key: `sl-win-${tabId}${o.big ? "-big" : ""}`,
     keep: true,
-    width: o.big ? WIN.bigW : fit.w,
-    height: o.big ? WIN.bigH : fit.h,
+    width: o.big ? big?.w ?? WIN.bigW : fit.w,
+    height: o.big ? big?.h ?? WIN.bigH : fit.h,
     ...(at ? { at } : {}),
     layout: {
       type: "column",
@@ -1131,9 +1151,11 @@ export function tearOff(tabId, at = null) {
     const next = rest.find((x) => x.index > info.tab.index) ?? rest[rest.length - 1];
     if (next) run("tab.select", { id: next.id });
   }
-  const overlay = openTorn(tabId, { at });
+  // Opened by command or menu there's no spot: take the centered one, so `at` is never null.
+  const spot = at ?? fitBox(WIN.w, WIN.h, null).at;
+  const overlay = openTorn(tabId, { at: spot });
   if (!overlay) return;
-  setTorn({ ...torn(), [tabId]: { min: false, big: false, at, overlay } });
+  setTorn({ ...torn(), [tabId]: { min: false, big: false, at: spot, overlay } });
   run("tab.settle", { id: tabId });
 }
 
@@ -1201,12 +1223,13 @@ export function startTornMove(tabId, e, frame, winOverlay) {
   });
 }
 
-/** Moves a torn window: reopened by its key at the new spot. */
+/** Moves a torn window: closed and reopened at the new spot (reopening a key keeps its old spot). */
 export function moveTorn(tabId, at) {
   const w = torn()[tabId];
-  if (!w) return;
+  if (!w || w.big) return;
   setTorn({ ...torn(), [tabId]: { ...w, at } });
-  openTorn(tabId, { at, big: w.big });
+  if (w.overlay) closeOverlay(w.overlay);
+  openTorn(tabId, { at });
 }
 
 /** Records where a torn window is (its title bar's top left), after a drag. */
@@ -1254,7 +1277,7 @@ export function tearSpot(p, grab = 120, size = null) {
   let y = Math.round(p.y - WIN.title / 2);
   if (size) {
     x = Math.min(x, size.width - WIN.w - 4);
-    y = Math.min(y, size.height - WIN.h - 4);
+    y = Math.min(y, size.height - dockHeight() - WIN.h - 4);
   }
   return { x: Math.max(0, x), y: Math.max(MENUBAR, y) };
 }
@@ -1299,6 +1322,7 @@ export function setWin(name, fields) {
 export function openWin(name, o = {}) {
   const n = { ...winState(name), ...o };
   if (!n.big) Object.assign(n, fitBox(n.w ?? APP_WIN[name].w, n.h ?? APP_WIN[name].h, n.at));
+  const big = n.big ? bigBox() : null;
   const overlay = openOverlay({
     mod: "snowleopard",
     kind: "window",
@@ -1306,9 +1330,9 @@ export function openWin(name, o = {}) {
     // As with torn windows, the zoomed one has its own key so it can open centered.
     key: n.big ? `sl-${name}-big` : `sl-${name}`,
     keep: true,
-    width: n.big ? WIN.bigW : n.w ?? APP_WIN[name].w,
-    height: n.big ? WIN.bigH : n.h ?? APP_WIN[name].h,
-    ...((n.big ? zoomedSpot() : n.at) ? { at: n.big ? zoomedSpot() : n.at } : {}),
+    width: n.big ? big?.w ?? WIN.bigW : n.w ?? APP_WIN[name].w,
+    height: n.big ? big?.h ?? WIN.bigH : n.h ?? APP_WIN[name].h,
+    ...((n.big ? big?.at ?? zoomedSpot() : n.at) ? { at: n.big ? big?.at ?? zoomedSpot() : n.at } : {}),
     // The size it opens at, so it draws its background before it has measured itself.
     props: { role: name, big: Boolean(n.big), ...(n.big ? {} : { size: [n.w ?? APP_WIN[name].w, n.h ?? APP_WIN[name].h] }) },
   });

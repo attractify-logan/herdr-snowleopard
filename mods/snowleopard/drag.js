@@ -18,7 +18,7 @@
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { props, closeOverlay, shared, setShared } from "herdr";
-import { C, FONT, ICON, placeFrame, setSavedFrame, desktopLimits, tearOff, tearSpot, resizeTorn, resizeWin, mainBars, moveTorn, putBack, torn, paint, rrect, vgrad, embossed, WIN, MIN_W, MIN_H } from "./kit.js";
+import { C, FONT, ICON, placeFrame, setSavedFrame, desktopLimits, tearOff, tearSpot, dockHeight, resizeTorn, resizeWin, mainBars, moveTorn, putBack, torn, paint, rrect, vgrad, embossed, WIN, MIN_W, MIN_H } from "./kit.js";
 
 export default class Drag {
   init(_p, cx) {
@@ -96,8 +96,9 @@ export default class Drag {
     const f = p.frame;
     const x = f.x + (this.pos.x - p.start.x);
     const y = f.y + (this.pos.y - p.start.y);
+    // Never dropped over the Dock: the whole window stays above it.
     const maxX = this.size ? this.size.width - 60 : x;
-    const maxY = this.size ? this.size.height - 40 : y;
+    const maxY = this.size ? Math.max(22, this.size.height - dockHeight() - f.h) : y;
     return { x: Math.round(Math.max(-f.w + 60, Math.min(maxX, x))), y: Math.round(Math.max(22, Math.min(maxY, y))) };
   }
 
@@ -107,13 +108,13 @@ export default class Drag {
     const f = p.frame;
     const at = this.pos ?? p.start;
     const maxW = this.size ? this.size.width - f.x : Infinity;
-    const maxH = this.size ? this.size.height - f.y : Infinity;
+    const maxH = this.size ? this.size.height - dockHeight() - f.y : Infinity;
     const w = Math.round(Math.max(WIN.minW, Math.min(maxW, f.w + at.x - p.start.x)));
     const h = Math.round(Math.max(WIN.minH, Math.min(maxH, f.h + at.y - p.start.y)));
     return { x: f.x, y: f.y, w, h };
   }
 
-  end() {
+  end(cx) {
     const p = props() ?? {};
     if (p.mode === "tornmove" && this.pos && !this.done) {
       this.done = true;
@@ -134,6 +135,11 @@ export default class Drag {
       this.flush();
       setShared("sl.placed", this.want);
       setSavedFrame(this.want);
+    }
+    // Drop the outline before the overlay goes, so it can't linger on screen.
+    if (this.pos) {
+      this.pos = null;
+      cx?.notify();
     }
     closeOverlay(props()?.overlay);
   }
@@ -242,10 +248,10 @@ export default class Drag {
       .when(props()?.mode === "resize" || props()?.mode === "tornresize", (el) => el.cursor_nwse_resize())
       .when(props()?.mode === "tornmove", (el) => el.cursor_grabbing())
       .on_mouse_move((e, cx) => this.move(e, cx))
-      .on_mouse_up("left", () => this.end())
+      .on_mouse_up("left", (_e, cx) => this.end(cx))
       .on_mouse_down("left", (_e, cx) => {
         cx.stop_propagation();
-        this.end();
+        this.end(cx);
       });
   }
 }

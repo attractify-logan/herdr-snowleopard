@@ -185,11 +185,12 @@ export default class Dock {
       if (!info) continue;
       list.push({ kind: "win", id: `win-${id}`, tab: id, label: `${info.space.name} — ${tabLabel(info.space.id, info.tab)}`, program: leadProgram(info.space.id, id) });
     }
-    for (const a of dockApps()) {
-      const win = WIN_APPS[appName(a.path)];
-      if (!win || !winState(win).min) continue;
+    // Notes and Slack wait here whether or not Obsidian and Slack are in the Dock.
+    for (const win of ["notes", "slack"]) {
+      if (!winState(win).min) continue;
+      const app = dockApps().find((a) => WIN_APPS[appName(a.path)] === win) ?? null;
       const last = winState(win).last;
-      list.push({ kind: "winmin", id: `winmin-${win}`, win, label: last ? last.split("/").pop().replace(/\.md$/i, "") : a.name, app: a });
+      list.push({ kind: "winmin", id: `winmin-${win}`, win, label: last ? last.split("/").pop().replace(/\.md$/i, "") : app?.name ?? (win === "notes" ? "Notes" : "Slack"), app });
     }
     list.push({ kind: "trash", id: "trash", label: "Trash" });
     return list;
@@ -216,7 +217,7 @@ export default class Dock {
     if (it.kind === "app") return image(ICON.herdr).w(s).h(s);
     if (it.kind === "trash") return image(ICON.trash).w(s).h(s);
     if (it.kind === "win") return miniWindow(s, it.program);
-    if (it.kind === "winmin") return miniWindow(s, null, it.app.icon ? appIcon(it.app.path) : null);
+    if (it.kind === "winmin") return miniWindow(s, null, it.app?.icon ? appIcon(it.app.path) : null, it.win);
     if (it.kind === "dapp") return it.app.icon ? image(appIcon(it.app.path)).w(s).h(s) : plainApp(s, it.label);
     const sp = it.space;
     const agent = it.program && !it.program.shell && it.program.key !== "shell";
@@ -319,7 +320,8 @@ export default class Dock {
     if (it.kind === "dapp") {
       const win = WIN_APPS[appName(it.app.path)];
       // Slack goes in a tab, which the main window can cover; its menu offers a window.
-      if (win === "slack" && !winState("slack").open) openSlackTab();
+      if (win === "slack" && winState("slack").min) openWin("slack");
+      else if (win === "slack" && !winState("slack").open) openSlackTab();
       else if (win) openWin(win);
       else exec("open", ["-a", it.app.path]).catch(() => {});
     }
@@ -398,23 +400,38 @@ function plainApp(s, name) {
     .child(div().absolute().top(0).left(0).size_full().flex().items_center().justify_center().font_family("Helvetica").font_weight(700).text_size(s * 0.42).text_color("#4a5160").child(String(name ?? "?").slice(0, 1).toUpperCase()));
 }
 
-/** A minimized window in the Dock: a tiny Aqua window, its program's icon badged on it. */
-function miniWindow(s, program, badge = null) {
+/** A minimized window in the Dock: a tiny Aqua window with the body of what it holds (a
+ *  terminal, a notes page or Slack), its program's or app's icon badged on it. */
+function miniWindow(s, program, badge = null, kind = "terminal") {
   const w = s;
   const h = s * 0.74;
   const y = (s - h) / 2;
-  const agent = program && !program.shell && program.key !== "shell";
-  return div()
+  const agent = Boolean(program && !program.shell && program.key !== "shell");
+  const body = kind === "terminal" ? "#141414" : "#ffffff";
+  const bodyH = h - 11;
+  let el = div()
     .relative()
     .w(s)
     .h(s)
     .child(paint(rrect(w, h, 3, 0, y), "#00000080", s, s))
     .child(paint(rrect(w - 2, 9, [2, 2, 0, 0], 1, y + 1), vgrad("#e9e9e9", "#a6a6a6"), s, s))
-    .child(paint(rrect(w - 2, h - 11, [0, 0, 2, 2], 1, y + 10), "#141414", s, s))
-    .children(["#ff6a5c", "#ffc130", "#5fcf3f"].map((c, i) => div().absolute().top(y + 3).left(4 + i * 5).w(3).h(3).rounded_full().bg(c)))
-    .child(div().absolute().top(y + 13).left(4).text_size(6).font_family("Menlo").text_color("#c8c8c8").child("$ _"))
-    .when(agent, (el) => el.child(div().absolute().bottom(2).right(0).child(programIcon(program, s * 0.38, { small: true }))))
-    .when(Boolean(badge), (el) => el.child(image(badge).absolute().bottom(2).right(0).w(s * 0.38).h(s * 0.38)));
+    .child(paint(rrect(w - 2, bodyH, [0, 0, 2, 2], 1, y + 10), body, s, s))
+    .children(["#ff6a5c", "#ffc130", "#5fcf3f"].map((c, i) => div().absolute().top(y + 3).left(4 + i * 5).w(3).h(3).rounded_full().bg(c)));
+  if (kind === "terminal") el = el.child(div().absolute().top(y + 13).left(4).text_size(6).font_family("Menlo").text_color("#c8c8c8").child("$ _"));
+  // A page of ruled gray lines; Slack's source list is a gray strip at the left.
+  if (kind === "notes") for (let i = 0; i < 4; i++) el = el.child(div().absolute().top(y + 14 + i * 4).left(5).w(i === 3 ? 16 : w - 12).h(1).bg("#b4b4b4"));
+  if (kind === "slack") {
+    el = el.child(div().absolute().top(y + 10).left(1).w(11).h(bodyH).bg("#4a3a5c"));
+    for (let i = 0; i < 3; i++) el = el.child(div().absolute().top(y + 14 + i * 5).left(16).w(i === 1 ? 14 : 22).h(1).bg("#b4b4b4"));
+  }
+  return el
+    .when(agent, (e) => e.child(div().absolute().bottom(2).right(0).child(programIcon(program, s * 0.38, { small: true }))))
+    .when(Boolean(badge), (e) => e.child(image(badge).absolute().bottom(2).right(0).w(s * 0.38).h(s * 0.38)))
+    // No app icon to badge it with: the notes glyph, or Slack's # on its aubergine.
+    .when(!badge && kind === "notes", (e) => e.child(image(ICON.note).absolute().bottom(2).right(0).w(s * 0.38).h(s * 0.38)))
+    .when(!badge && kind === "slack", (e) =>
+      e.child(div().absolute().bottom(2).right(0).w(s * 0.38).h(s * 0.38).rounded(4).bg("#4a154b").flex().items_center().justify_center().font_family("Helvetica").font_weight(700).text_size(s * 0.26).text_color("#ffffff").child("#")),
+    );
 }
 
 /** The shelf's top surface: narrower at the back, full width at the front. */
