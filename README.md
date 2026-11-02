@@ -41,8 +41,9 @@ and Dock icon runs a real Herdr command.
   Aqua window inside Herdr. The vault's folders and notes are in a source list,
   notes render as Markdown, `[[wiki-links]]` open notes in place, and search
   matches names and text. + (⌘N) makes a new note in the shown note's folder; Edit (⌘E) changes the note; ⌘S or Done saves it, and
-  a note changed on disk in the meantime is never overwritten. Obsidian itself
-  stays one right-click away.
+  a note changed on disk in the meantime is never overwritten. Notes written
+  elsewhere (an agent, a git pull) show up within a few seconds while the window
+  is open. Obsidian itself stays one right-click away.
 - **Slack (beta).** With Slack in the Dock, its icon opens Slack as a tab in
   the main window (or, from its right-click menu, in its own Aqua window): channels and DMs, messages with names and threads, and a
   field to send. It uses a small Slack app of your own (the window's setup

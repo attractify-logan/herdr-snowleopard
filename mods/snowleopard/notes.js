@@ -24,6 +24,7 @@ const TOOLBAR = 32;
 const BAR = 15;
 const SIDE = 210;
 const ROW = 20;
+const RESCAN = 4000;
 
 /** Obsidian's [[links]] and ![[embeds]] as Markdown links this window follows; front matter
  *  off. Code blocks and code spans are left as written. */
@@ -134,6 +135,8 @@ export default class Notes {
     cx.timer.every(120, (cx) => {
       if (`${this.vis.lo},${this.vis.hi}` !== this.drawn) cx.notify();
     });
+    // Notes written elsewhere (an agent, a git pull) show up without reopening the window.
+    cx.timer.every(RESCAN, (cx) => this.rescan(cx));
     if (obsidianHere === null)
       cx.spawn(async (cx) => {
         try {
@@ -188,6 +191,57 @@ export default class Notes {
         this.status = `Couldn't read the vault: ${e}`;
       }
       cx.notify();
+    });
+  }
+
+  /** Rereads the vault's file list, and the shown note if its file changed, while the window
+   *  is open. Not while a note is being edited or named, nor while the last look is still out. */
+  rescan(cx) {
+    if (!this.vault || this.editor || this.naming) return;
+    // A look that never came back stops holding the next one up after half a minute.
+    if (this.rescanning && Date.now() - this.rescanning < 30000) return;
+    this.rescanning = Date.now();
+    cx.spawn(async (cx) => {
+      try {
+        // The shown note's change time (to the nanosecond) and size on the first line, then every file (as the first read).
+        const r = await exec("/bin/sh", ["-c", 'stat -f "%Fm %z" "$1/$2" 2>/dev/null || echo; find "$1" -type f -not -path "*/.*"', "sh", this.vault, this.note ?? ""]);
+        if (r.code !== 0 && !r.stdout) return;
+        const cut = r.stdout.indexOf("\n");
+        const stamp = r.stdout.slice(0, cut).trim();
+        const listing = r.stdout.slice(cut + 1);
+        let changed = false;
+        // Compared as find printed it first: sorting thousands of names costs a redraw's time.
+        if (listing !== this.listing) {
+          this.listing = listing;
+          const all = listing
+            .split("\n")
+            .filter((p) => p.startsWith(`${this.vault}/`))
+            .map((p) => p.slice(this.vault.length + 1))
+            .sort(byName);
+          if (all.join("\n") !== this.all.join("\n")) {
+            this.all = all;
+            this.notes = all.filter((p) => /\.md$/i.test(p));
+            this.index();
+            Object.assign(KEEP, { all: this.all, notes: this.notes, folders: this.folders });
+            if (this.query) this.grep(cx);
+            changed = true;
+          }
+        }
+        if (this.note && stamp && this.stamp?.note === this.note && this.stamp.at !== stamp && !this.editor) {
+          const text = await readTextFile(this.abs(this.note));
+          if (text !== null && text !== this.text && !this.editor) {
+            this.text = KEEP.text = text;
+            this.md = KEEP.md = wikify(text);
+            changed = true;
+          }
+        }
+        if (this.note && stamp) this.stamp = { note: this.note, at: stamp };
+        if (changed) cx.notify();
+      } catch {
+        // A missed look is fine: the next one comes in a few seconds.
+      } finally {
+        this.rescanning = 0;
+      }
     });
   }
 
