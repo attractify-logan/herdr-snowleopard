@@ -12,7 +12,9 @@ import {
 import {
   C, FONT, GLYPH, ICON, pill, paint, rrect, vgrad, fillGrad, openMenu, closeMenus, menuSize, shortcut, shown, plural, torn, tabInfo, canTear, remoteSpaceItems, pref, openSheet,
   fitFrame, takeAskMark,
+  gauge, programIcon,
 } from "./kit.js";
+import { refreshUsage, usageItems, usageIcons, topPct } from "./usage.js";
 
 export const PROFILES = [
   ["snowleopard", "Basic"],
@@ -93,6 +95,9 @@ export default class MenuBar {
     cx.timer.every(1000, () => fitFrame());
     this.now = new Date();
     this.agentsToRun = [];
+    // Claude's and Codex's plan usage for the usage extra (usage.js), checked every 5 minutes.
+    if (pref("usage")) refreshUsage();
+    cx.timer.every(60000, () => pref("usage") && refreshUsage());
     exec("id", ["-F"])
       .then((r) => {
         const n = r.stdout.trim();
@@ -254,6 +259,8 @@ export default class MenuBar {
           { sep: true },
           { label: "Send Feedback…", act: { run: ["app.feedback", {}] } },
         ];
+      case "usage":
+        return usageItems();
       case "agents":
         return [
           ...agentItems(),
@@ -289,13 +296,13 @@ export default class MenuBar {
   open(name, bounds) {
     const m = shared("sl.menu");
     if (m?.id) closeMenus();
-    const extra = ["agents", "machines", "clock", "user"].includes(name);
+    const extra = ["usage", "agents", "machines", "clock", "user"].includes(name);
     const items = this.menu(name);
     // A menu extra's menu opens left-aligned under it, shifted left only at the screen edge.
     let x = bounds.x;
     if (extra) {
       // The extras end at the window's right edge: the title's x plus the widths from it on (Spotlight is 30).
-      const order = ["agents", "machines", "clock", "user"];
+      const order = ["usage", "agents", "machines", "clock", "user"];
       const edge = order.slice(order.indexOf(name)).reduce((n, k) => n + (this.widths[k] ?? 0), bounds.x + 30);
       x = Math.max(0, Math.min(bounds.x, edge - menuSize(items).w - 4));
     }
@@ -359,6 +366,7 @@ export default class MenuBar {
         if (cur?.owner === name && cur?.id) return closeMenus();
         if (cur?.closed === name && Date.now() - (cur.at ?? 0) < 250) return;
         if (o.onPress) return o.onPress();
+        o.onOpen?.();
         this.open(name, e.bounds);
         cx.notify();
       })
@@ -433,6 +441,25 @@ export default class MenuBar {
     const ms = machines();
     const allUp = ms.every((m) => m.layout === "ready");
     const glyph = (path, on, w = 16, h = 16, dim = false) => svg(path).w(w).h(h).text_color(on ? "#ffffff" : dim ? "#00000059" : "#000000");
+    // Claude's and Codex's plan usage: each one's icon, a small gauge of its fullest limit, the percent.
+    const u = pref("usage") ? shared("sl.usage") : null;
+    const services = [["claude", u?.claude], ["codex", u?.codex]].filter(([, x]) => topPct(x) !== null);
+    const usage = services.length > 0;
+    const icons = usage ? usageIcons() : {};
+    const usageExtra = (on) =>
+      h_flex()
+        .items_center()
+        .gap(8)
+        .children(
+          services.map(([k, x]) =>
+            h_flex()
+              .items_center()
+              .gap(4)
+              .child(icons[k] ? programIcon(icons[k], 14, { small: true }) : div().text_size(11).font_weight(700).child(x.name))
+              .child(gauge(topPct(x), 24, 7, { selected: on }))
+              .child(div().text_size(12).text_color(on ? "#ffffff" : C.text).child(`${Math.round(topPct(x))}%`)),
+          ),
+        );
     // Who needs you is a red pill with the count; a spinner alone says something is working.
     const agentsExtra = (on) =>
       h_flex()
@@ -445,6 +472,7 @@ export default class MenuBar {
           .relative()
           .h_full()
           .items_center()
+          .when(Boolean(usage), (el) => el.child(this.title("usage", usageExtra, { px: 7, onOpen: () => refreshUsage(true) })))
           .child(this.title("agents", agentsExtra, { px: 7 }))
           .when(ms.length > 1, (el) => el.child(this.title("machines", (on) => glyph(GLYPH.wifi, on, 16, 14, !allUp), { px: 7 })))
           .child(this.title("clock", clock(this.now), { px: 8 }))

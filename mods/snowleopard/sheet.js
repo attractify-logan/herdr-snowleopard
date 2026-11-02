@@ -312,6 +312,7 @@ export default class Sheet {
       .child(box("pf-bounce", "Bounce a space in the Dock when an agent needs me", "", "bounce"))
       .child(box("pf-notice", "Show a notice when an agent needs me", "", "notice"))
       .child(box("pf-done-badge", "Count finished agents in Dock badges", "", "doneBadge"))
+      .child(box("pf-usage", "Show Claude and Codex usage in the menu bar", "", "usage"))
       .child(div().flex_1())
       .child(h_flex().justify_end().child(aquaButton("pf-done", "Done", done, { primary: true })));
     return this.frame(body, done);

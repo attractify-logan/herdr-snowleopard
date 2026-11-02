@@ -36,6 +36,7 @@ import Notice from "./notice.js";
 import { spaces } from "herdr";
 import { openSheet, tearOff, mergeAll, torn, openWin, openSlackTab, setWin, winState, newTab, askCloseTab } from "./kit.js";
 import { lastNotified } from "./slackwatch.js";
+import { refreshUsage } from "./usage.js";
 
 const ROLES = { menubar: MenuBar, titlebar: TitleBar, sidebar: Sidebar, tabs: Tabs, pane: PaneHeader, status: StatusBar, dock: Dock, menu: Menu, sheet: Sheet, desk: Desk, drag: Drag, aqua: AquaWindow, notes: Notes, slack: Slack, notice: Notice };
 
@@ -43,6 +44,7 @@ const ROLES = { menubar: MenuBar, titlebar: TitleBar, sidebar: Sidebar, tabs: Ta
 const COMMANDS = {
   about: () => openSheet("about"),
   prefs: () => openSheet("prefs", { key: "sl-prefs" }),
+  usage: () => refreshUsage(true),
   forcequit: () => openSheet("forcequit"),
   fullscreen: () => window.toggle_fullscreen(),
   tearoff: () => {

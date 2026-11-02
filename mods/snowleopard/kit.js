@@ -740,7 +740,7 @@ export function closeMenus() {
   setShared("sl.menu", null);
 }
 
-const SHEET = { about: [300, 360], forcequit: [440, 400], dockapps: [400, 480], rename: [420, 170], prefs: [420, 280] };
+const SHEET = { about: [300, 360], forcequit: [440, 400], dockapps: [400, 480], rename: [420, 170], prefs: [420, 310] };
 
 /** Opens a sheet (the sheet role): kind and its props. */
 export function openSheet(kind, p = {}) {
@@ -846,8 +846,9 @@ export function takeAskMark() {
 //   bounce      bounce a space's Dock folder when an agent there starts needing you
 //   notice      show a notice (top right) when an agent starts needing you
 //   doneBadge   count finished agents in the Dock's red badges too
+//   usage       show Claude's and Codex's plan usage in the menu bar (usage.js)
 
-export const PREF_DEFAULTS = { askTabName: true, bounce: true, notice: true, doneBadge: false };
+export const PREF_DEFAULTS = { askTabName: true, bounce: true, notice: true, doneBadge: false, usage: true };
 
 export function pref(name) {
   return { ...PREF_DEFAULTS, ...(shared("sl.prefs") ?? {}) }[name];

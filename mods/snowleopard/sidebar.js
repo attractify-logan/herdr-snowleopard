@@ -105,13 +105,15 @@ export default class Sidebar {
           .child(
             div()
               .min_w(0)
+              // With a gray sub-label, the name keeps its room and the sub-label gives way.
+              .when(Boolean(o.sub), (el) => el.flex_shrink(0).max_w(o.subRoom ?? 110))
               .truncate()
               .text_size(12)
               .text_color(sel ? "#ffffff" : C.text)
               .when(sel, (el) => el.font_weight(700))
               .child(o.label),
           )
-          .when(Boolean(o.sub), (el) => el.child(div().min_w(0).truncate().text_size(11).text_color(sel ? "#ffffffd0" : C.gray).child(o.sub))),
+          .when(Boolean(o.sub), (el) => el.child(div().flex_1().min_w(0).truncate().text_size(11).text_color(sel ? "#ffffffd0" : C.gray).child(o.sub))),
       )
       .when(Boolean(o.mark), (el) => el.child(div().relative().flex_none().child(o.mark)))
       // The close disc sits left of the icon, in the indent, so the status stays in view.
