@@ -78,8 +78,10 @@ and Dock icon runs a real Herdr command.
 - **Status bar.** "2 need you" and "1 done" are links: each click goes to
   the next one.
 - **Settings.** Herdr › Snow Leopard Settings… turns the new-tab name prompt,
-  the hops, the notices, the done count on Dock badges, and the usage meter
-  on or off.
+  the hops, the notices, the done count on Dock badges, the usage meter, and
+  Dock hiding on or off. With hiding on (also Apple › Turn Dock Hiding On) the
+  Dock tucks away and slides back up when the pointer reaches the bottom edge;
+  it's off by default.
 - **Aqua dialogs.** Close confirmations, About Herdr, and Force Quit (end any
   terminal).
 - **Full screen.** View › Enter Full Screen (⌃⌘F with the keys below) fills the

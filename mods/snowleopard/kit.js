@@ -745,7 +745,7 @@ export function closeMenus() {
   setShared("sl.menu", null);
 }
 
-const SHEET = { about: [300, 360], forcequit: [440, 400], dockapps: [400, 480], rename: [420, 170], prefs: [420, 310] };
+const SHEET = { about: [300, 360], forcequit: [440, 400], dockapps: [400, 480], rename: [420, 170], prefs: [420, 340] };
 
 /** Opens a sheet (the sheet role): kind and its props. */
 export function openSheet(kind, p = {}) {
@@ -762,7 +762,7 @@ export function openSheet(kind, p = {}) {
   });
 }
 
-/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen, zoomWindow, tearOff: tab, raise: tab, putBack: tab, mergeAll, launch: [app, folder?], reveal: path, unDock: app, win: name }. */
+/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen, zoomWindow, tearOff: tab, raise: tab, putBack: tab, mergeAll, launch: [app, folder?], reveal: path, unDock: app, win: name, pref: [name, value] }. */
 export function perform(act) {
   if (!act) return;
   if (act.run?.[0] === "tab.new") newTab(act.run[1] ?? {});
@@ -782,6 +782,7 @@ export function perform(act) {
   if (act.win) openWin(act.win);
   if (act.slackTab) openSlackTab();
   if (act.mergeAll) mergeAll();
+  if (act.pref) setPref(act.pref[0], act.pref[1]);
   if (act.newSpaceIn)
     pickFolder({ prompt: "New Space" })
       .then((folder) => folder && run("space.new", { folder }))
@@ -852,8 +853,9 @@ export function takeAskMark() {
 //   notice      show a notice (top right) when an agent starts needing you
 //   doneBadge   count finished agents in the Dock's red badges too
 //   usage       show Claude's and Codex's plan usage in the menu bar (usage.js)
+//   dockAutoHide  the Dock slides away until the pointer reaches the bottom edge (dock.js)
 
-export const PREF_DEFAULTS = { askTabName: true, bounce: true, notice: true, doneBadge: false, usage: true };
+export const PREF_DEFAULTS = { askTabName: true, bounce: true, notice: true, doneBadge: false, usage: true, dockAutoHide: false };
 
 export function pref(name) {
   return { ...PREF_DEFAULTS, ...(shared("sl.prefs") ?? {}) }[name];
@@ -1127,7 +1129,7 @@ export function appSize() {
   const d = shared("sl.desk") ?? {};
   const w = d["desk-top"]?.w;
   if (!w) return null;
-  const h = MENUBAR + (d["desk-top"]?.h ?? 0) + (d["desk-left"]?.h ?? 0) + (d["desk-bottom"]?.h ?? 0) + (shown("dock") ? 92 : 0);
+  const h = MENUBAR + (d["desk-top"]?.h ?? 0) + (d["desk-left"]?.h ?? 0) + (d["desk-bottom"]?.h ?? 0) + dockHeight();
   return { w, h };
 }
 

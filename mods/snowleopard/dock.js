@@ -21,7 +21,7 @@ import { spaces, agents, run, shared, exec } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, oval, vgrad, programIcon, leadProgram, countBadge, openMenu, closeMenus, menuSize,
   spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, makeAppIcons, openWin, winState, WIN_APPS, openSlackTab,
-  STATUS_WORD, tabLabel, pref,
+  STATUS_WORD, tabLabel, pref, dockHeight,
 } from "./kit.js";
 import { withStatus, urgentAgent, agentName, agentSpace, showNotice } from "./notice.js";
 import { watchSlack, slackBadge } from "./slackwatch.js";
@@ -43,6 +43,9 @@ function initials(name) {
 }
 
 const BOUNCES = 3;
+// The Dock's height in the layout, and the strip left at the bottom edge while it hides.
+const FULL = 92;
+const PEEK = 4;
 const CYCLE = 1000; // ms: one hop, its rebound and a pause
 
 /** The Dock's hop at t ms into a cycle: up 16 px easing out, down, a small rebound, rest. */
@@ -75,7 +78,15 @@ export default class Dock {
     this.waiting = null;
     this.hops = new Map();
     this.notice = null;
-    cx.timer.every(500, (cx) => this.watch(cx));
+    // Hiding (Apple menu or Settings): the Dock shrinks to a strip at the bottom edge and slides
+    // back up when the pointer reaches it, while a folder hops, or while its menu is open.
+    this.over = false;
+    this.leftAt = 0;
+    this.px = dockHeight() || FULL;
+    cx.timer.every(500, (cx) => {
+      this.watch(cx);
+      this.fit();
+    });
     // Which kept apps are running, for their lights: a process list every few seconds.
     this.poll(cx);
     cx.timer.every(4000, (cx) => this.poll(cx));
@@ -97,6 +108,23 @@ export default class Dock {
         }
       } catch {}
     });
+  }
+
+  /** The Dock's height for its hiding: full, or a strip to reach for. Resized only on a change. */
+  fit() {
+    const hide = pref("dockAutoHide");
+    // Over it, by where the pointer is: a hover can miss its end (the pointer leaves under
+    // another window), which would keep the Dock up.
+    const v = window.viewport_size();
+    const m = window.mouse_position();
+    const over = Boolean(v?.height && m && m.x >= 0 && m.x <= v.width && m.y >= v.height - this.px - 2 && m.y <= v.height);
+    if (this.over && !over) this.leftAt = Date.now();
+    this.over = over;
+    const busy = over || this.hops.size > 0 || shared("sl.menu")?.owner === "dock" || Date.now() - this.leftAt < 700;
+    const px = hide && !busy ? PEEK : FULL;
+    if (px === this.px) return;
+    this.px = px;
+    run("layout.resize", { id: "dock", px });
   }
 
   /** Bounces the folder and opens a notice for every agent that has just started to need you. */
@@ -392,10 +420,11 @@ export default class Dock {
         this.size = size;
         cx.notify();
       })
+      .on_hover((over) => over && this.fit())
       .relative()
       .size_full()
       .font_family(FONT)
-      .when(bw > 0, (el) => el.children(kids));
+      .when(bw > 0 && bh > PEEK * 4, (el) => el.children(kids));
   }
 }
 

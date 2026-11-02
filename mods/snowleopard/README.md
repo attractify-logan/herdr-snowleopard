@@ -36,7 +36,9 @@ tab (asks only when something runs). Mod commands:
 
 `notice.js` draws the Growl-style notice (overlay `sl-notice`) and picks the
 next agent that needs you; `usage.js` fetches plan usage on the busiest
-machine (shared `sl.usage`). Settings live in shared `sl.prefs`.
+machine (shared `sl.usage`). Settings live in shared `sl.prefs`; with
+`dockAutoHide` the Dock resizes its block (`layout.resize`) to a 4 px strip and
+back to 92 px when the pointer reaches the bottom edge.
 
 View > Terminal Profile switches Basic, Pro, Homebrew, Ocean and Novel.
 `art/aurora.py` regenerates the wallpaper (numpy + Pillow).

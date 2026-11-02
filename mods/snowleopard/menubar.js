@@ -136,7 +136,8 @@ export default class MenuBar {
           { label: u?.app?.ready ? "Software Update… (1)" : "Software Update…", act: { run: ["app.settings", { section: "updates" }] } },
           { sep: true },
           { label: "System Preferences…", act: { run: ["app.settings", {}] } },
-          { label: shown("dock") ? "Turn Dock Hiding On" : "Turn Dock Hiding Off", act: { toggle: "dock" } },
+          // As on a Mac, hiding means the Dock slides away until the pointer reaches the bottom edge.
+          { label: pref("dockAutoHide") ? "Turn Dock Hiding Off" : "Turn Dock Hiding On", act: { pref: ["dockAutoHide", !pref("dockAutoHide")] } },
           { label: "Dock Applications…", act: { sheet: ["dockapps", {}] } },
           { sep: true },
           { label: "Force Quit…", shortcut: sc("snowleopard.forcequit"), act: { sheet: ["forcequit"] } },
