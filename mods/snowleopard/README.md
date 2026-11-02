@@ -28,9 +28,15 @@ shared `sl.windows` records each one (`min` while it waits in the Dock,
 overlay in `tear` mode: a ghost tab, then a ghost window, follows the pointer
 and the window opens where it's released.
 
-Keys (`keys.json`, section `layout:snowleopard`): `ctrl-f2` walks the menu
-bar menus, `cmd-alt-escape` Force Quit, `cmd-m` minimize, `ctrl-cmd-f` full screen. Mod commands:
-`snowleopard.<apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes|slack|slacktab>`.
+Keys (`keys.json` here, section `layout:snowleopard`): `ctrl-f2` walks the menu
+bar menus, `cmd-alt-escape` Force Quit, `cmd-m` minimize, `ctrl-cmd-f` full
+screen, `f2`/`shift-f2` rename, `cmd-t` new tab (asks its name), `cmd-w` close
+tab (asks only when something runs). Mod commands:
+`snowleopard.<apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes|slack|slacktab|newtab|closetab|prefs|usage>`.
+
+`notice.js` draws the Growl-style notice (overlay `sl-notice`) and picks the
+next agent that needs you; `usage.js` fetches plan usage on the busiest
+machine (shared `sl.usage`). Settings live in shared `sl.prefs`.
 
 View > Terminal Profile switches Basic, Pro, Homebrew, Ocean and Novel.
 `art/aurora.py` regenerates the wallpaper (numpy + Pillow).

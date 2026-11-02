@@ -13,9 +13,16 @@ and Dock icon runs a real Herdr command.
 ## Features
 
 - **Menu bar.** It has the Apple, Herdr, File, Edit, View, Window and Help
-  menus. Their shortcuts are read live from your `keys.json`. On the right are
-  an agents menu, a machines status icon, the clock, a layout switcher and
-  Spotlight (the command palette).
+  menus. Their shortcuts are read live from your `keys.json`, and ← → move
+  between open menus. On the right are:
+  - an agents menu, with a red count when an agent needs you, sorted into
+    Needs You, Done, Working and Idle, and "Go to Next Agent That Needs You"
+    at the top;
+  - a usage meter: how much of your Claude and Codex plan limits is used, as
+    a small gauge per service, with the 5-hour and weekly limits and their
+    reset times in its menu (see below);
+  - a machines status icon, the clock, a layout switcher and Spotlight (the
+    command palette).
 - **A real window on the desktop.**
   - Drag its title bar (or bottom bar) to move it and the bottom-right grip to
     resize it. Green, or a double-click on the title, zooms it to fill the
@@ -50,17 +57,29 @@ and Dock icon runs a real Herdr command.
 - **Dock applications.** View › Dock Applications… keeps any app in the Dock
   beside Herdr, with a light under the running ones. Right-click one to open
   the shown space's folder in it.
-- **Source list.** Spaces are grouped by machine, with your agents below. A
-  space's triangle lists its tabs; hover a tab or an agent for a close button. A
-  spinner means working, a red badge means it needs you, and a blue dot means
-  done.
+- **Source list.** AGENTS sits on top: the ones that need you first (oldest
+  first), then done, then working, each with its space and machine under its
+  name. Spaces follow, grouped by machine. A space's triangle lists its tabs;
+  hover a tab or an agent for a close button. A spinner means working, a red
+  badge means it needs you, and a blue dot means done. It scrolls with an
+  Aqua scrollbar.
 - **Tabs and panes.** The tab bar works like Terminal.app's, with ⌘ numbers.
-  A new tab asks for its name (turn that off in Herdr › Snow Leopard
-  Settings…).
-  Split panes get small title strips.
-- **Dock.** Each space is a folder with its initials and its agent's icon. A
-  space bounces when an agent is blocked. Minimized windows wait by the Trash,
-  and the Trash closes a tab or space after asking first.
+  A tab you make by hand (⌘T, + or a double-click on the bar) asks for its
+  name; tabs agents or scripts make don't. Double-click a tab to rename it.
+  ⌘W closes a plain shell at once and asks first when something is running.
+  Tabs that don't fit go into a » menu. Split panes get small title strips.
+- **Dock.** Each space is a folder with its initials and its most urgent
+  agent's icon, and a red badge counting the agents that need you. When one
+  starts needing you, its folder hops three times and a small dark notice
+  slides in at the top right (click it to go there). Click Herdr's own icon to
+  jump to the next agent that needs you; right-click it for the agents menu.
+  Minimized windows wait by the Trash, and the Trash closes a tab or space
+  after asking first.
+- **Status bar.** "2 need you" and "1 done" are links: each click goes to
+  the next one.
+- **Settings.** Herdr › Snow Leopard Settings… turns the new-tab name prompt,
+  the hops, the notices, the done count on Dock badges, and the usage meter
+  on or off.
 - **Aqua dialogs.** Close confirmations, About Herdr, and Force Quit (end any
   terminal).
 - **Full screen.** View › Enter Full Screen (⌃⌘F with the keys below) fills the
@@ -80,8 +99,8 @@ herdr-app check ~/.config/herdr-app/mods/snowleopard
 herdr-app do layout.switch --name snowleopard
 ```
 
-`ctrl-shift-l` cycles layouts to get back. You can also add these keys to
-`~/.config/herdr-app/keys.json`:
+`ctrl-shift-l` cycles layouts to get back. For the Mac keys, merge
+`mods/snowleopard/keys.json` into `~/.config/herdr-app/keys.json`:
 
 ```json
 "layout:snowleopard": {
@@ -90,11 +109,24 @@ herdr-app do layout.switch --name snowleopard
   "cmd-m": "window.minimize",
   "ctrl-cmd-f": "snowleopard.fullscreen",
   "f2": "snowleopard.renametab",
-  "shift-f2": "snowleopard.renamespace"
+  "shift-f2": "snowleopard.renamespace",
+  "cmd-t": "snowleopard.newtab",
+  "cmd-w": "snowleopard.closetab"
 }
 ```
 
 The layout needs macOS for Lucida Grande and the Apple menu glyph.
+
+## Usage meter
+
+The meter asks Claude's and Codex's own usage pages every 5 minutes (and
+when you open its menu), using the logins their CLIs already keep:
+`~/.claude/.credentials.json` or the Keychain's "Claude Code-credentials",
+and `~/.codex/auth.json` or Pi's `~/.pi/agent/auth.json`. It asks the
+machine running the most agents first, so a remote host where your agents
+are logged in works without logging in on the Mac. The tokens never leave
+that machine; only the usage numbers come back. Turn it off in Snow Leopard
+Settings….
 
 ## Claude Code theme and context gauge
 
