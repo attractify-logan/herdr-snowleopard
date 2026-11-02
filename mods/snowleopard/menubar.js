@@ -11,7 +11,7 @@ import {
 } from "herdr";
 import {
   C, FONT, GLYPH, ICON, pill, paint, rrect, vgrad, fillGrad, openMenu, closeMenus, menuSize, shortcut, shown, plural, torn, tabInfo, canTear, remoteSpaceItems, pref, openSheet,
-  fitFrame, takeAskMark,
+  fitFrame, takeAskMark, winState,
   gauge, programIcon,
 } from "./kit.js";
 import { refreshUsage, usageItems, usageIcons, topPct } from "./usage.js";
@@ -249,6 +249,10 @@ export default class MenuBar {
                 ...wins.map((w) => ({ label: w.tab.named ? w.tab.name : `Tab ${w.tab.name}`, detail: out[w.tab.id].min ? "in the Dock" : w.space.name, act: { raise: w.tab.id } })),
               ]
             : []),
+          // Notes and Slack open inside Herdr, so they're reachable without the real apps.
+          { sep: true },
+          { label: "Notes", checked: Boolean(winState("notes").open), detail: winState("notes").min ? "in the Dock" : "", act: { win: "notes" } },
+          { label: "Slack", checked: Boolean(winState("slack").open), detail: winState("slack").min ? "in the Dock" : "", act: winState("slack").open || winState("slack").min ? { win: "slack" } : { slackTab: true } },
         ];
       }
       case "help":
