@@ -8,12 +8,12 @@
 // agent shows a close button, which asks before closing its tab.
 
 import { div, svg, image } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
+import { h_flex, v_flex, Scrollbar } from "gpui-base";
 import { spaces, agents, machines, panes, run, setAgentOrder } from "herdr";
 import {
   C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, pill, statusMark, programIcon, openMenu,
-  closeMenus, textured, menuSize, spaceItems,
-  torn, raiseTorn, tabClose, leadProgram, openSheet, shortcut, contextLevels, gauge,
+  closeMenus, textured, menuSize, spaceItems, remoteSpaceItems, tabLabel, askCloseTab,
+  torn, raiseTorn, tabClose, leadProgram, shortcut, contextLevels, gauge,
 } from "./kit.js";
 
 const ROW = 22;
@@ -28,7 +28,8 @@ export default class Sidebar {
     this.hotClose = false;
   }
 
-  heading(id, label) {
+  // alert: something under this heading is blocked, which a folded heading must still say.
+  heading(id, label, alert = false) {
     const open = !this.fold[id];
     return h_flex()
       .id(`hd-${id}`)
@@ -40,7 +41,11 @@ export default class Sidebar {
       .items_center()
       .justify_between()
       .child(embossed(label.toUpperCase(), { size: 11, bold: true, color: C.heading, shadow: "#ffffffc0" }))
-      .child(div().text_size(11).text_color(C.heading).opacity(this.hot === id ? 0.9 : 0).child(open ? "Hide" : "Show"))
+      .child(
+        !open && alert
+          ? statusMark("blocked")
+          : div().text_size(11).text_color(C.heading).opacity(this.hot === id ? 0.9 : 0).child(open ? "Hide" : "Show"),
+      )
       .on_hover((h, cx) => {
         this.hot = h ? id : this.hot === id ? null : this.hot;
         cx.notify();
@@ -90,23 +95,33 @@ export default class Sidebar {
       )
       .child(div().relative().flex_none().child(o.icon))
       .child(
-        div()
+        h_flex()
           .relative()
           .flex_1()
           .min_w(0)
-          .truncate()
-          .text_size(12)
-          .text_color(sel ? "#ffffff" : C.text)
-          .when(sel, (el) => el.font_weight(700))
-          .child(o.label),
+          .overflow_hidden()
+          .gap(5)
+          .items_baseline()
+          .child(
+            div()
+              .min_w(0)
+              .truncate()
+              .text_size(12)
+              .text_color(sel ? "#ffffff" : C.text)
+              .when(sel, (el) => el.font_weight(700))
+              .child(o.label),
+          )
+          .when(Boolean(o.sub), (el) => el.child(div().min_w(0).truncate().text_size(11).text_color(sel ? "#ffffffd0" : C.gray).child(o.sub))),
       )
-      .when(Boolean(o.mark) && !(o.onClose && this.hoverRow === id), (el) => el.child(div().relative().flex_none().child(o.mark)))
+      .when(Boolean(o.mark), (el) => el.child(div().relative().flex_none().child(o.mark)))
+      // The close disc sits left of the icon, in the indent, so the status stays in view.
       .when(Boolean(o.onClose) && this.hoverRow === id, (el) =>
         el.child(
           div()
             .id(`${id}-x`)
-            .relative()
-            .flex_none()
+            .absolute()
+            .top((ROW - 13) / 2)
+            .left((o.indent ?? 18) - 17)
             .child(tabClose(13, this.hotClose))
             .tooltip("Close Tab…")
             .on_hover((h, cx) => {
@@ -149,17 +164,47 @@ export default class Sidebar {
     const all = spaces();
     const ags = agents();
     const ctx = contextLevels();
-    setAgentOrder(ags.map((a) => a.address));
-    const groups = [];
-    for (const m of machines()) {
-      const list = all.filter((s) => (s.machine ?? null) === (m.name ?? null));
-      // Every machine shows, so one with no spaces left still offers a new one.
-      groups.push({ name: m.name, list, state: m.layout });
-    }
+    // AGENTS: whoever needs you first (blocked, longest waiting first), then the
+    // finished (newest first), then the working. Idle ones show under their spaces.
+    const rank = { blocked: 0, done: 1, working: 2 };
+    const attn = ags
+      .filter((a) => a.status in rank)
+      .sort((a, b) => rank[a.status] - rank[b.status] || (a.status === "blocked" ? a.seq - b.seq : a.status === "done" ? b.seq - a.seq : 0));
+    setAgentOrder(attn.map((a) => a.address).concat(ags.filter((a) => !(a.status in rank)).map((a) => a.address)));
+    // The machine running the most agents first, This Mac first on a tie.
+    const load = (name) => ags.filter((a) => (all.find((s) => s.id === a.space)?.machine ?? null) === (name ?? null)).length;
+    const groups = machines()
+      .map((m, i) => ({ name: m.name, list: all.filter((s) => (s.machine ?? null) === (m.name ?? null)), state: m.layout, n: load(m.name), i }))
+      .sort((a, b) => b.n - a.n || (a.name ? 1 : 0) - (b.name ? 1 : 0) || a.i - b.i);
     const sections = [];
+    // Agents lead the list, so who needs you is never scrolled out of view.
+    if (attn.length) {
+      sections.push(this.heading("agents", "Agents", attn.some((a) => a.status === "blocked")));
+      if (!this.fold.agents)
+        for (const a of attn) {
+          const sp = all.find((s) => s.id === a.space);
+          const tab = sp?.tabs.find((t) => t.id === a.tab);
+          sections.push(
+            this.row(`ag-${a.address}`, {
+              selected: a.focused,
+              icon: programIcon(a.program, 16, { small: true }),
+              label: tab ? tabLabel(a.space, tab) : a.program?.name ?? "Agent",
+              sub: `${a.space_name}${sp?.machine ? ` on ${sp.machine}` : ""}`,
+              mark: ctx.has(a.address)
+                ? h_flex().gap(5).items_center().child(gauge(ctx.get(a.address), 30, 7, { selected: a.focused })).child(statusMark(a.status, { selected: a.focused }))
+                : statusMark(a.status, { selected: a.focused }),
+              onClick: () => {
+                const t = panes().find((x) => x.terminal === a.address)?.tab;
+                if (t && torn()[t]) raiseTorn(t);
+                else run("agent.focus", { terminal: a.address });
+              },
+            }).tooltip(`${a.program?.name ?? "Agent"} in ${a.space_name} — ${a.title || a.address}${ctx.has(a.address) ? ` · context ${Math.round(ctx.get(a.address))}% full` : ""}`),
+          );
+        }
+    }
     for (const g of groups) {
       const id = `m-${g.name ?? "local"}`;
-      sections.push(this.heading(id, g.name ? g.name : "This Mac"));
+      sections.push(this.heading(id, g.name ? g.name : "This Mac", g.list.some((s) => s.status === "blocked")));
       if (this.fold[id]) continue;
       if (g.state !== "ready" && !g.list.length)
         sections.push(h_flex().h(ROW).pl(18).text_size(11).italic().text_color(C.gray).child(g.state === "loading" ? "Connecting…" : "Unavailable"));
@@ -176,26 +221,26 @@ export default class Sidebar {
         const tabs = s.tabs.filter((t) => !t.settled).length;
         const out = torn();
         const list = s.tabs.filter((t) => !t.settled || out[t.id]);
-        // A space opens when it's first shown, then stays as it is until its
-        // triangle is clicked: following the shown space would fold the one left
-        // behind and make the rows below jump on every switch.
-        if (s.active && this.open[s.id] === undefined) this.open[s.id] = true;
-        const open = this.open[s.id] ?? false;
+        // A space's tabs show when it's the shown space or something there needs you,
+        // unless its triangle has been clicked: that choice wins.
+        const open = this.open[s.id] ?? (s.active || s.status === "blocked" || s.status === "done");
+        // Only a row drawn selected gets the inverted mark.
+        const sel = s.active && !open;
         sections.push(
           this.row(`sp-${s.id}`, {
             disclose: list.length ? open : null,
             onDisclose: () => (this.open[s.id] = !open),
-            selected: s.active && !open,
+            selected: sel,
             icon: image(s.machine ? ICON.folderNet : ICON.folder).w(16).h(16),
             label: s.name,
-            mark: urgent ? statusMark(s.status, { selected: s.active }) : tabs > 1 ? pill(tabs, { selected: s.active }) : null,
+            mark: urgent ? statusMark(s.status, { selected: sel }) : tabs > 1 ? pill(tabs, { selected: sel }) : null,
             onClick: () => run("space.select", { id: s.id }),
             onRight: (e) => this.spaceMenu(s, e),
           }),
         );
         if (open)
           for (const t of list) {
-            const named = t.named ? t.name : leadProgram(s.id, t.id)?.name ?? `Tab ${t.name}`;
+            const named = tabLabel(s.id, t);
             sections.push(
               this.row(`tb-${t.id}`, {
                 indent: 36,
@@ -208,7 +253,7 @@ export default class Sidebar {
                   run("space.select", { id: s.id });
                   run("tab.select", { id: t.id });
                 },
-                onClose: () => openSheet("closetab", { tab: t.id }),
+                onClose: () => askCloseTab(t.id),
                 onRight: (e) => {
                   closeMenus();
                   openMenu(
@@ -225,32 +270,6 @@ export default class Sidebar {
           }
       }
     }
-    if (ags.length) {
-      sections.push(this.heading("agents", "Agents"));
-      if (!this.fold.agents)
-        for (const a of ags) {
-          const name = a.tab_name && a.tab_name !== String(a.tab_index) ? a.tab_name : a.program?.name ?? "Agent";
-          sections.push(
-            this.row(`ag-${a.address}`, {
-              selected: a.focused,
-              icon: programIcon(a.program, 16, { small: true }),
-              label: name,
-              mark: ctx.has(a.address)
-                ? h_flex().gap(5).items_center().child(gauge(ctx.get(a.address), 30, 7, { selected: a.focused })).child(statusMark(a.status, { selected: a.focused }))
-                : statusMark(a.status, { selected: a.focused }),
-              onClick: () => {
-                const t = panes().find((x) => x.terminal === a.address)?.tab;
-                if (t && torn()[t]) raiseTorn(t);
-                else run("agent.focus", { terminal: a.address });
-              },
-              onClose: () => {
-                const t = panes().find((x) => x.terminal === a.address)?.tab ?? a.tab;
-                if (t) openSheet("closetab", { tab: t });
-              },
-            }).tooltip(`${a.program?.name ?? "Agent"} in ${a.space_name} — ${a.title || a.address}${ctx.has(a.address) ? ` · context ${Math.round(ctx.get(a.address))}% full` : ""}`),
-          );
-        }
-    }
 
     return v_flex()
       .id("root")
@@ -261,11 +280,19 @@ export default class Sidebar {
       .size_full()
       .font_family(FONT)
       .bg(live ? C.source : C.sourceOff)
-      .child(v_flex().id("list").flex_1().min_h(0).pb(8).overflow_y_scroll().children(sections))
+      .child(
+        v_flex()
+          .relative()
+          .flex_1()
+          .min_h(0)
+          .child(v_flex().id("sl-source").size_full().pb(8).overflow_y_scroll().children(sections))
+          .child(Scrollbar.vertical("sl-source").mode("always").absolute().inset_0()),
+      )
       .child(this.bottomBar(live));
   }
 
   bottomBar(live) {
+    const several = machines().length > 1;
     return h_flex()
       .flex_none()
       .relative()
@@ -281,14 +308,34 @@ export default class Sidebar {
           .relative()
           .child(
             textured([
-              { id: "sb-add", glyph: GLYPH.plus, size: 10, w: 26, tooltip: "New space", onClick: () => run("space.new", {}) },
+              several
+                ? {
+                    id: "sb-add",
+                    glyph: GLYPH.plus,
+                    size: 10,
+                    menu: true,
+                    w: 36,
+                    tooltip: "New space…",
+                    onDown: (e) => {
+                      closeMenus();
+                      const items = [
+                        { label: "New Space on This Mac", act: { run: ["space.new", {}] } },
+                        ...remoteSpaceItems(),
+                        { sep: true },
+                        { label: "New Space in Folder…", act: { newSpaceIn: true } },
+                      ];
+                      const b = e.bounds;
+                      openMenu(items, b ? { x: b.x, y: b.y - menuSize(items).h - 2 } : undefined, { owner: "sb-add" });
+                    },
+                  }
+                : { id: "sb-add", glyph: GLYPH.plus, size: 10, w: 26, tooltip: "New space", onClick: () => run("space.new", {}) },
               {
                 id: "sb-gear",
                 glyph: GLYPH.gear,
                 size: 12,
                 menu: true,
                 w: 36,
-                tooltip: "Action",
+                tooltip: `Actions for ${spaces().find((x) => x.active)?.name ?? "the space"}`,
                 onDown: (e) => {
                   closeMenus();
                   const s = spaces().find((x) => x.active);
