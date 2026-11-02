@@ -18,8 +18,8 @@ and Dock icon runs a real Herdr command.
   - an agents menu, with a red count when an agent needs you, sorted into
     Needs You, Done, Working and Idle, and "Go to Next Agent That Needs You"
     at the top;
-  - a usage meter: how much of your Claude and Codex plan limits is used, as
-    a small gauge per service, with the 5-hour and weekly limits and their
+  - a usage meter: how much of your Claude and Codex plan limits is left, as
+    a small gauge per service, with what's left of the 5-hour and weekly limits and their
     reset times in its menu (see below);
   - a machines status icon, the clock, a layout switcher and Spotlight (the
     command palette).
