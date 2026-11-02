@@ -15,10 +15,10 @@
 
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, TextView, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
-import { props, exec, closeOverlay, setShared } from "herdr";
+import { props, exec, closeOverlay, setShared, run } from "herdr";
 import {
   C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, aquaButton, closeMenus, winState, setWin,
-  closeWin, zoomWin, startTornResize, dockApps, appIcon, appName, openWin, aquaScrollbar, dragScroll, endScroll,
+  closeWin, zoomWin, startTornResize, dockApps, appIcon, appName, openWin, slackTab, aquaScrollbar, dragScroll, endScroll,
 } from "./kit.js";
 import { KEEP, KEYCHAIN, slackApi, slackSignIn, loadUsers, loadConvs, unread, markSeen, slackShown } from "./slackwatch.js";
 
@@ -69,6 +69,27 @@ function codeSplit(md) {
   }
   out.push(md.slice(from));
   return out;
+}
+
+/** Slack's error codes in plain sentences. */
+function plain(e) {
+  const code = e?.message ?? String(e);
+  switch (code) {
+    case "invalid_auth":
+      return "Slack didn't accept that token. Copy the User OAuth Token again from your Slack app's OAuth & Permissions page.";
+    case "not_authed":
+    case "account_inactive":
+    case "token_revoked":
+      return "This Slack sign-in has ended. Sign out and connect again.";
+    case "not_in_channel":
+      return "You're not in this channel. Join it in Slack first.";
+    case "ratelimited":
+      return "Slack asked us to slow down. Try again in a minute.";
+    case "missing_scope":
+      return "The Slack app is missing a permission. Recreate it from the setup panel.";
+    default:
+      return `Slack didn't answer as expected (${code}).`;
+  }
 }
 
 const tile = (id) => {
@@ -136,7 +157,11 @@ export default class Slack {
     this.msgs = new Map(); // conversation id → converted messages, oldest first
     this.thread = null; // { ts, msgs }
     this.status = "";
+    this.bad = true; // the status is a failure (red); progress and notes are gray
     this.ready = false;
+    // The window's own keyboard focus, so typing never reaches a hidden terminal.
+    this.focus = cx.focus_handle();
+    this.focus.focus();
     this.tokenField = InputState.new({ placeholder: "xoxp-…" });
     this.compose = InputState.new({ placeholder: "Message" });
     this.compose.on("submit", (_e, cx) => this.send(cx));
@@ -213,20 +238,24 @@ export default class Slack {
     const token = this.tokenField.value().trim();
     if (!token) return;
     if (token.startsWith("xoxb-")) {
+      this.bad = true;
       this.status = "That's a bot token (xoxb-): it would show the bot's messages, not yours. Paste the User OAuth Token (xoxp-).";
       cx.notify();
       return;
     }
+    this.bad = false;
     this.status = "Checking the token with Slack…";
     cx.notify();
     try {
       await this.connect(token, cx);
       await exec("security", ["add-generic-password", "-U", "-s", KEYCHAIN, "-a", "slack", "-w", token]);
       this.tokenField.set_value("");
+      this.focus.focus();
     } catch (e) {
       this.token = KEEP.token = null;
       this.me = KEEP.me = null;
-      this.status = `That token didn't work: ${e.message}`;
+      this.bad = true;
+      this.status = plain(e);
     }
     cx.notify();
   }
@@ -241,6 +270,8 @@ export default class Slack {
     this.thread = null;
     this.keep();
     setShared("sl.slackUnread", {});
+    this.status = "";
+    this.focus.focus();
     cx.notify();
   }
 
@@ -249,7 +280,8 @@ export default class Slack {
       this.convs = await loadConvs();
       cx.notify();
     } catch (e) {
-      this.status = e.message;
+      this.bad = true;
+      this.status = plain(e);
       cx.notify();
     }
   }
@@ -322,7 +354,8 @@ export default class Slack {
       }
     } catch (e) {
       if (id === this.cur) {
-        this.status = e.message === "missing_scope" ? "The Slack app is missing a scope; recreate it from the setup panel." : e.message;
+        this.bad = true;
+        this.status = plain(e);
         cx.notify();
       }
     }
@@ -335,7 +368,8 @@ export default class Slack {
       this.thread = KEEP.thread = { ts, msgs: this.convert([...(j.messages ?? [])].reverse()) };
       cx.notify();
     } catch (e) {
-      this.status = e.message;
+      this.bad = true;
+      this.status = plain(e);
       cx.notify();
     }
   }
@@ -361,7 +395,8 @@ export default class Slack {
         if (thread_ts) await this.openThread(thread_ts, cx);
       } catch (e) {
         this.compose.set_value(text);
-        this.status = `Not sent: ${e.message}`;
+        this.bad = true;
+        this.status = `Not sent. ${plain(e)}`;
         cx.notify();
       }
     });
@@ -402,12 +437,13 @@ export default class Slack {
     const where = conv ? (conv.kind === "dm" || conv.kind === "group" ? conv.name : `#${conv.name}`) : "Slack";
     const title = this.me ? `${where} — ${this.me.team}` : "Slack";
     const app = dockApps().find((a) => appName(a.path) === "Slack");
+    const bare = this.bare();
     return div()
       .id("sl-head")
       .relative()
       .flex_none()
       .w_full()
-      .h(TITLE + TOOLBAR)
+      .h(bare ? TITLE : TITLE + TOOLBAR)
       .on_mouse_down("left", (e) => {
         if (e.click_count >= 2) zoomWin("slack", props()?.overlay);
       })
@@ -427,7 +463,8 @@ export default class Slack {
           .child(embossed(title, { size: 13, color: live ? "#000000" : "#4d4d4d", truncate: true })),
       )
       .child(div().absolute().top(4).left(8).child(this.lights(live)))
-      .child(
+      .when(!bare, (el) =>
+        el.child(
         h_flex()
           .absolute()
           .top(TITLE)
@@ -445,7 +482,13 @@ export default class Slack {
           .child(div().flex_1())
           .when(Boolean(app), (el) => el.child(textured([{ id: "sl-app", text: "Slack", w: 56, tooltip: "Open the Slack app", onClick: () => exec("open", ["-a", app.path]).catch(() => {}) }])))
           .when(Boolean(this.token), (el) => el.child(textured([{ id: "sl-out", text: "Sign Out", w: 70, tooltip: "Forget the Slack token (it's removed from the Keychain)", onClick: (_e, cx) => cx.spawn((cx) => this.signOut(cx)) }]))),
+        ),
       );
+  }
+
+  /** Not signed in and nothing to put in the toolbar: a plain title bar, as a 10.6 utility window has. */
+  bare() {
+    return this.ready && !this.token && !this.thread && !dockApps().some((a) => appName(a.path) === "Slack");
   }
 
   convRow(c, news) {
@@ -723,9 +766,9 @@ export default class Slack {
 
   setup() {
     const steps = [
-      "1. Create the Slack app (it opens with the right permissions filled in) and pick your workspace. If the form comes up empty, choose From a manifest and paste Copy Manifest.",
-      "2. Install it to the workspace, then copy its User OAuth Token (it starts with xoxp-).",
-      "3. Paste it here. It's kept in your Mac's Keychain, never in a file.",
+      "1. Click Create the Slack App. Slack opens with everything filled in: pick your workspace and click Create.",
+      "2. In your new Slack app, click Install to Workspace, then copy the User OAuth Token (it starts with xoxp-).",
+      "3. Paste it below. It's kept in your Mac's Keychain, never in a file.",
     ];
     return v_flex()
       .id("sl-setup")
@@ -748,8 +791,23 @@ export default class Slack {
               .gap(10)
               .child(aquaButton("sl-create", "Create the Slack App…", () => exec("open", [CREATE_URL]).catch(() => {}), { w: 190 }))
               // If Slack doesn't fill the form from the link: Create New App › From a manifest, and paste.
-              .child(aquaButton("sl-manifest", "Copy Manifest", () => exec("/bin/sh", ["-c", 'printf %s "$1" | pbcopy', "sh", JSON.stringify(MANIFEST, null, 2)]).catch(() => {}), { w: 130 })),
+              .child(
+                aquaButton(
+                  "sl-manifest",
+                  "Copy Manifest",
+                  (_e, cx) =>
+                    exec("/bin/sh", ["-c", 'printf %s "$1" | pbcopy', "sh", JSON.stringify(MANIFEST, null, 2)])
+                      .then(() => {
+                        this.bad = false;
+                        this.status = "Manifest copied.";
+                        cx.notify();
+                      })
+                      .catch(() => {}),
+                  { w: 130 },
+                ),
+              ),
           )
+          .child(div().text_size(11).text_color(C.gray).child("If the form comes up empty, choose “From a manifest” in Slack and paste what Copy Manifest copied."))
           .child(
             h_flex()
               .pt(6)
@@ -766,9 +824,21 @@ export default class Slack {
               )
               .child(aquaButton("sl-connect", "Connect", (_e, cx) => cx.spawn((cx) => this.saveToken(cx)), { primary: true, w: 90 })),
           )
-          .when(Boolean(this.status), (el) => el.child(div().text_size(11).text_color("#9c1b10").child(this.status))),
+          .when(Boolean(this.status), (el) =>
+            el.child(
+              h_flex()
+                .gap(5)
+                .items_center()
+                .when(this.busy(), (el) => el.child(svg(GLYPH.spinner).flex_none().w(12).h(12).text_color("#4a4a4a").spin(900)))
+                .child(div().text_size(11).text_color(this.bad ? "#9c1b10" : C.dim).child(this.status)),
+            ),
+          ),
       )
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
+  }
+
+  busy() {
+    return !this.bad && this.status.startsWith("Checking");
   }
 
   bottom(w, live) {
@@ -830,7 +900,12 @@ export default class Slack {
       .child(div().flex_1())
       .child(embossed(this.me?.team ?? "Slack", { size: 12, color: live ? "#000000" : "#4d4d4d" }))
       .child(div().flex_1())
-      .child(textured([{ id: "sl-float", text: "Open in Window", w: 112, tooltip: "Move Slack to its own window", onClick: () => openWin("slack") }]))
+      .child(textured([{ id: "sl-float", text: "Open in Window", w: 112, tooltip: "Move Slack to its own window", onClick: () => {
+        openWin("slack");
+        // One copy only: the tab would poll alongside the window.
+        const at = slackTab();
+        if (at) run("tab.close", { id: at.tab.id, confirmed: true });
+      } }]))
       .when(Boolean(app), (el) => el.child(textured([{ id: "sl-app", text: "Slack", w: 56, tooltip: "Open the Slack app", onClick: () => exec("open", ["-a", app.path]).catch(() => {}) }])))
       .when(Boolean(this.token), (el) => el.child(textured([{ id: "sl-out", text: "Sign Out", w: 70, tooltip: "Forget the Slack token (it's removed from the Keychain)", onClick: (_e, cx) => cx.spawn((cx) => this.signOut(cx)) }])));
     return v_flex()
@@ -839,6 +914,9 @@ export default class Slack {
         this.size = size;
         cx.notify();
       })
+      .track_focus(this.focus)
+      // The moves carry no button, so a thumb let go outside the view is dropped when the pointer leaves it.
+      .on_hover((over) => over || endScroll(this.sb))
       .on_mouse_move((e, cx) => dragScroll(this.sb, e, cx))
       .on_mouse_up("left", () => endScroll(this.sb))
       .size_full()
@@ -888,6 +966,8 @@ export default class Slack {
         this.size = size;
         cx.notify();
       })
+      .track_focus(this.focus)
+      .on_hover((over) => over || endScroll(this.sb))
       .on_mouse_move((e, cx) => dragScroll(this.sb, e, cx))
       .on_mouse_up("left", () => endScroll(this.sb))
       .on_mouse_down("left", (e) => {
@@ -904,7 +984,7 @@ export default class Slack {
         el
           .child(paint(rrect(w, h, 5), "#00000078", w, h))
           .child(paint(rrect(w - 2, h - 2, 4, 1, 1), "#ededed", w, h))
-          .child(paint(rrect(w - 2, TITLE + TOOLBAR, [4, 4, 0, 0], 1, 1), live ? vgrad(C.titleTop, C.titleBot) : vgrad(C.titleTopOff, C.titleBotOff), w, h))
+          .child(paint(rrect(w - 2, this.bare() ? TITLE : TITLE + TOOLBAR, [4, 4, 0, 0], 1, 1), live ? vgrad(C.titleTop, C.titleBot) : vgrad(C.titleTopOff, C.titleBotOff), w, h))
           .child(paint(rrect(w - 12, 1, 0, 6, 1), "#ffffffb0", w, h)),
       )
       .child(

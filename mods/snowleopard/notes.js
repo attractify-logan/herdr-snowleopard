@@ -11,11 +11,11 @@
 // title bar moves it and every control stops its press.
 
 import { div, svg, image } from "gpui-kit";
-import { h_flex, v_flex, InputState, Input, TextView, EditorState, Editor, v_virtual_list } from "gpui-base";
-import { props, exec, readTextFile, writeTextFile, settings, closeOverlay } from "herdr";
+import { h_flex, v_flex, InputState, Input, TextView, EditorState, Editor, v_virtual_list, VirtualListScrollHandle, Scrollbar } from "gpui-base";
+import { props, exec, readTextFile, writeTextFile, closeOverlay } from "herdr";
 import {
   C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, closeMenus, winState, setWin,
-  closeWin, zoomWin, startTornResize,
+  closeWin, zoomWin, startTornResize, aquaScrollbar, dragScroll, endScroll,
 } from "./kit.js";
 import { obsidianVault } from "./kit.js";
 
@@ -79,6 +79,9 @@ function links(md) {
 // restore reopens the window): a fresh copy shows it at once, then rereads.
 const KEEP = (globalThis.__snowleopardNotes ??= {});
 
+// Is the Obsidian app installed? Asked once (Launch Services), then remembered.
+let obsidianHere = null;
+
 const base = (rel) => rel.split("/").pop();
 // Case-blind order. localeCompare with options is far too slow in this runtime
 // for a vault's worth of names (a whole redraw's time).
@@ -114,12 +117,35 @@ export default class Notes {
     this.fwd = [];
     this.editor = null; // an EditorState while editing
     this.status = "";
+    this.sticky = false; // a status that stays until the next note is shown
+    this.dirty = false; // edits not saved yet (the close light's dot)
     this.query = "";
     this.hits = null; // notes whose text matches the query
     this.expanded = new Set();
     this.naming = null; // the new note's name field while it's asked for
+    // The window's own keyboard focus, so ⌘E/⌘N work and typing never reaches a hidden terminal.
+    this.focus = cx.focus_handle();
+    this.focus.focus();
+    this.list = VirtualListScrollHandle.new();
+    // The rows the list drew last, for its scrollbar (it says only by drawing them).
+    this.vis = { lo: 0, hi: -1 };
+    this.drawn = "";
+    this.sb = {};
+    cx.timer.every(120, (cx) => {
+      if (`${this.vis.lo},${this.vis.hi}` !== this.drawn) cx.notify();
+    });
+    if (obsidianHere === null)
+      cx.spawn(async (cx) => {
+        try {
+          obsidianHere = (await exec("open", ["-Ra", "Obsidian"])).code === 0;
+        } catch {
+          obsidianHere = false;
+        }
+        cx.notify();
+      });
     this.search = InputState.new({ placeholder: "Search" });
     this.search.on("change", (_e, cx) => {
+      this.clearStatus();
       this.query = this.search.value().trim();
       this.grep(cx);
       cx.notify();
@@ -165,6 +191,23 @@ export default class Notes {
     });
   }
 
+  /** A passing message in the bottom bar: gone after a few seconds (sticky ones stay until a note is shown). */
+  say(text, cx, sticky = false) {
+    this.status = text;
+    this.sticky = sticky;
+    if (!sticky)
+      cx.timer.after(4000, (cx) => {
+        if (this.status !== text || this.sticky) return;
+        this.status = "";
+        cx.notify();
+      });
+    cx.notify();
+  }
+
+  clearStatus() {
+    if (this.status && !this.sticky && this.text !== null) this.status = "";
+  }
+
   abs(rel) {
     return `${this.vault}/${rel}`;
   }
@@ -175,8 +218,7 @@ export default class Notes {
       if (this.editor && !(await this.save(cx))) return;
       const text = await readTextFile(this.abs(rel));
       if (text === null) {
-        this.status = `“${title(rel)}” is no longer there.`;
-        return cx.notify();
+        return this.say(`“${title(rel)}” is no longer there.`, cx);
       }
       if (push && this.note && this.note !== rel) {
         this.back.push(this.note);
@@ -186,6 +228,7 @@ export default class Notes {
       this.text = KEEP.text = text;
       this.md = KEEP.md = wikify(text);
       this.status = "";
+      this.sticky = false;
       // Open the folders down to it.
       let d = dir(rel);
       while (d) {
@@ -199,6 +242,7 @@ export default class Notes {
   }
 
   go(stack, other, cx) {
+    this.clearStatus();
     const rel = stack.pop();
     if (!rel) return;
     if (this.note) other.push(this.note);
@@ -225,8 +269,7 @@ export default class Notes {
     const target = url.startsWith("note:") ? url.slice(5) : url;
     const rel = this.resolve(target);
     if (!rel) {
-      this.status = `No note called “${decodeURIComponent(target)}”.`;
-      return cx.notify();
+      return this.say(`No note called “${decodeURIComponent(target)}”.`, cx);
     }
     // Notes open here; pictures and PDFs in their own apps.
     if (/\.md$/i.test(rel)) this.show(rel, cx);
@@ -267,6 +310,7 @@ export default class Notes {
   cancelNew(cx) {
     this.naming?.release();
     this.naming = null;
+    this.focus.focus();
     cx.notify();
   }
 
@@ -283,8 +327,7 @@ export default class Notes {
       try {
         await writeTextFile(this.abs(rel), `# ${name}\n\n`, null);
       } catch (e) {
-        this.status = `Couldn't make the note: ${e}`;
-        return cx.notify();
+        return this.say(`Couldn't make the note: ${e}`, cx);
       }
       this.all = [...this.all, rel].sort(byName);
       this.notes = this.all.filter((p) => /\.md$/i.test(p));
@@ -300,14 +343,23 @@ export default class Notes {
 
   edit(cx) {
     if (this.text === null) return;
+    this.clearStatus();
+    this.dirty = false;
     this.editor = EditorState.new({
       language: "markdown",
       value: this.text,
       soft_wrap: true,
       line_numbers: false,
       folding: false,
-      font_family: settings().font_family,
+      font_family: "Monaco",
       font_size: 13,
+    });
+    // Compared on change, not per frame.
+    this.editor.on("change", (_e, cx) => {
+      const dirty = this.editor ? this.editor.value() !== this.text : false;
+      if (dirty === this.dirty) return;
+      this.dirty = dirty;
+      cx.notify();
     });
     cx.notify();
   }
@@ -322,16 +374,17 @@ export default class Notes {
         await writeTextFile(this.abs(this.note), next, this.text);
         this.text = KEEP.text = next;
         this.md = KEEP.md = wikify(next);
-        this.status = "Saved.";
+        this.say("Saved.", cx);
       } catch {
-        this.status = "The note changed on disk, so this edit wasn't saved. Copy it, then reopen the note.";
-        cx.notify();
+        this.say("The note changed on disk, so this edit wasn't saved. Copy it, then reopen the note.", cx, true);
         return false;
       }
     }
+    this.dirty = false;
     if (!stay) {
       this.editor.release();
       this.editor = null;
+      this.focus.focus();
     }
     cx.notify();
     return true;
@@ -359,7 +412,10 @@ export default class Notes {
         kinds.map(([kind, glyph, tip, act]) =>
           div()
             .id(`nl-${kind}`)
+            .relative()
             .child(bead(on ? kind : "off", 14, this.lit ? glyph : null))
+            // Aqua's mark for a document with unsaved changes.
+            .when(kind === "close" && this.dirty && !this.lit, (el) => el.child(div().absolute().top(4.5).left(4.5).w(5).h(5).rounded_full().bg("#4d0a03")))
             .tooltip(tip)
             .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
             .on_click((_e, cx) => act(cx)),
@@ -446,7 +502,7 @@ export default class Notes {
           .child(
             textured([
               {
-                id: "n-edit",
+                id: editing ? "n-done" : "n-edit",
                 text: editing ? "Done" : "Edit",
                 w: 56,
                 on: editing,
@@ -457,13 +513,21 @@ export default class Notes {
           )
           .child(
             textured([
-              {
-                id: "n-app",
-                text: "Obsidian",
-                w: 72,
-                tooltip: "Open this note in the Obsidian app",
-                onClick: () => this.note && exec("open", [`obsidian://open?path=${encodeURIComponent(this.abs(this.note))}`]).catch(() => {}),
-              },
+              obsidianHere
+                ? {
+                    id: "n-app",
+                    text: "Obsidian",
+                    w: 72,
+                    tooltip: "Open this note in the Obsidian app",
+                    onClick: () => this.note && exec("open", [`obsidian://open?path=${encodeURIComponent(this.abs(this.note))}`]).catch(() => {}),
+                  }
+                : {
+                    id: "n-finder",
+                    text: "Show in Finder",
+                    w: 110,
+                    tooltip: "Show this note's file in the Finder",
+                    onClick: () => this.note && exec("open", ["-R", this.abs(this.note)]).catch(() => {}),
+                  },
             ]),
           )
           .child(div().flex_1())
@@ -527,6 +591,7 @@ export default class Notes {
   }
 
   pick(key, cx) {
+    this.clearStatus();
     if (key.startsWith("f:")) {
       const d = key.slice(2);
       if (this.expanded.has(d)) this.expanded.delete(d);
@@ -585,16 +650,53 @@ export default class Notes {
           .flex_1()
           .min_h(0)
           .child(
-            v_virtual_list("n-rows", rows.length, ROW, (i) => rows[i].key, (range) => rows.slice(range.start, range.end).map((r) => this.rowEl(r)))
+            h_flex()
               .size_full()
-              .on_item_click((key, cx) => this.pick(key, cx)),
+              .child(
+                v_virtual_list("n-rows", rows.length, ROW, (i) => rows[i].key, (range) => {
+                  this.vis = { lo: range.start, hi: range.end - 1 };
+                  return rows.slice(range.start, range.end).map((r) => this.rowEl(r));
+                })
+                  .track_scroll(this.list)
+                  .flex_1()
+                  .min_w(0)
+                  .h_full()
+                  .on_item_click((key, cx) => this.pick(key, cx)),
+              )
+              .child(this.scrollbar(rows.length, live)),
           ),
       )
       .when(Boolean(this.query) && !rows.length, (el) => el.child(div().absolute().top(26).left(0).px(12).text_size(11).text_color(C.gray).child("No notes match.")))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
+      .on_mouse_down("left", (_e, cx) => {
+        cx.stop_propagation();
+        this.focus.focus();
+      });
+  }
+
+  /** Aqua's scrollbar beside the list, in rows. */
+  scrollbar(count, live) {
+    const { lo, hi } = this.vis;
+    this.drawn = `${lo},${hi}`;
+    const shown = Math.max(1, hi - lo + 1);
+    const go = (i, cx) => {
+      this.list.scroll_to_item(Math.max(0, Math.min(count - 1, i)), "top");
+      cx.notify();
+    };
+    return aquaScrollbar({
+      id: "n-scroll",
+      state: this.sb,
+      live,
+      count,
+      first: lo,
+      shown: Math.min(shown, count),
+      onStep: (dir, cx) => go(lo + dir, cx),
+      onPage: (dir, cx) => go(lo + dir * Math.max(1, shown - 1), cx),
+      onDrag: (i, cx) => go(i, cx),
+    });
   }
 
   page() {
+    // Edit keeps the white page and its padding.
     if (this.editor)
       return div()
         .id("n-edit-area")
@@ -603,31 +705,49 @@ export default class Notes {
         .h_full()
         .flex()
         .flex_col()
+        .bg("#ffffff")
+        .px(26)
+        .pt(16)
+        .text_color("#1d1d1d")
         .child(Editor.new(this.editor).flex_1().min_h(0))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
     return div()
       .id("n-page")
+      .relative()
       .flex_1()
       .min_w(0)
       .h_full()
       .bg("#ffffff")
-      .px(26)
-      .pt(16)
       .text_color("#1d1d1d")
       .text_size(14)
       .font_family(FONT)
+      // The note scrolls in a box of its own (a TextView doesn't scroll itself), a scrollbar over its right edge.
+      // Each note has its own scroll box, so it opens at the top.
       .when(this.text !== null, (el) =>
-        el.child(
-          TextView.markdown(`n-md-${this.note}`, this.md ?? "")
-            // Not selectable (it is by default): the theme's selection color is the terminal's (dark gray in
-            // Pro), which reads as black bars on this white page. Edit (⌘E) to copy text.
-            .selectable(false)
-            .scrollable(true)
-            .on_link_click((url, cx) => this.link(url, cx)),
-        ),
+        el
+          .child(
+            v_flex()
+              .id(`sl-note-${this.note}`)
+              .size_full()
+              .px(26)
+              .pt(16)
+              .pb(16)
+              .overflow_y_scroll()
+              .child(
+                TextView.markdown(`n-md-${this.note}`, this.md ?? "")
+                  // Not selectable (it is by default): the theme's selection color is the terminal's (dark gray in
+                  // Pro), which reads as black bars on this white page. Edit (⌘E) to copy text.
+                  .selectable(false)
+                  .on_link_click((url, cx) => this.link(url, cx)),
+              ),
+          )
+          .child(Scrollbar.vertical(`sl-note-${this.note}`).mode("always").absolute().inset_0()),
       )
-      .when(this.text === null, (el) => el.child(div().text_size(12).text_color(C.gray).child(this.status || "Loading the vault…")))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
+      .when(this.text === null, (el) => el.child(div().px(26).pt(16).text_size(12).text_color(C.gray).child(this.status || "Loading the vault…")))
+      .on_mouse_down("left", (_e, cx) => {
+        cx.stop_propagation();
+        this.focus.focus();
+      });
   }
 
   bottom(w, live) {
@@ -691,6 +811,9 @@ export default class Notes {
         const n = winState("notes");
         if (b && !n.big && (n.at?.x !== Math.round(b.x) || n.at?.y !== Math.round(b.y))) setWin("notes", { at: { x: Math.round(b.x), y: Math.round(b.y) } });
       })
+      .on_mouse_move((e, cx) => dragScroll(this.sb, e, cx))
+      .on_mouse_up("left", () => endScroll(this.sb))
+      .track_focus(this.focus)
       .on_key_down((e, cx) => {
         if (e.keystroke === "cmd-s" && this.editor) cx.spawn((cx) => this.save(cx, true));
         else if (e.keystroke === "cmd-n") this.startNew(cx);

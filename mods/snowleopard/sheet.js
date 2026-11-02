@@ -344,7 +344,8 @@ export default class Sheet {
         )
         .child(hasIcon(path) ? image(appIcon(path)).flex_none().w(20).h(20) : div().flex_none().w(20).h(20))
         .child(div().flex_1().min_w(0).truncate().text_size(12).child(appName(path)))
-        .child(div().flex_none().text_size(10).text_color(C.gray).child(path.startsWith("/System/") ? "System" : ""))
+        // Obsidian and Slack open as windows inside Herdr (kit.js WIN_APPS), not in their own apps.
+        .child(div().flex_none().text_size(10).text_color(C.gray).child(path.startsWith("/System/") ? "System" : ["Obsidian", "Slack"].includes(appName(path)) ? "Opens inside Herdr" : ""))
         .on_click((_e, cx) => {
           if (on) removeDockApp(path);
           else addDockApp(path);
