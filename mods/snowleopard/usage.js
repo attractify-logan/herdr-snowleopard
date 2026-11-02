@@ -98,9 +98,11 @@ export async function refreshUsage(now = false) {
   U.busy = t;
   try {
     const out = { claude: null, codex: null, from: null };
+    let asked = 0;
     for (const on of order()) {
       if (out.claude && out.codex) break;
       const r = await exec("sh", ["-c", SCRIPT], on ? { on } : {}).catch(() => null);
+      if (r) asked++;
       for (const line of (r?.stdout ?? "").split("\n")) {
         const m = line.match(/^(claude|codex) (\S+) (\{.*\})$/);
         if (!m || out[m[1]]) continue;
@@ -117,6 +119,9 @@ export async function refreshUsage(now = false) {
         }
       }
     }
+    // No machine answered (at launch Herdr may not know them yet): keep the last numbers
+    // and ask again on the next minute's tick.
+    if (!asked) return;
     U.at = Date.now();
     if (JSON.stringify(out) !== JSON.stringify(shared("sl.usage") ?? null)) setShared("sl.usage", out);
   } finally {

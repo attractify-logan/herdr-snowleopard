@@ -20,7 +20,7 @@ import { h_flex } from "gpui-base";
 import { spaces, agents, run, shared, exec } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, oval, vgrad, programIcon, leadProgram, countBadge, openMenu, closeMenus, menuSize,
-  spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, openWin, winState, WIN_APPS, openSlackTab,
+  spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, makeAppIcons, openWin, winState, WIN_APPS, openSlackTab,
   STATUS_WORD, tabLabel, pref,
 } from "./kit.js";
 import { withStatus, urgentAgent, agentName, agentSpace, showNotice } from "./notice.js";
@@ -58,6 +58,15 @@ const RANK = { blocked: 0, done: 1, working: 2 };
 
 export default class Dock {
   init(_p, cx) {
+    // The Dock apps' icons live in the mod's folder, so a fresh copy of the mod has none:
+    // make the missing ones (it skips those already there), then draw again.
+    if (dockApps().length)
+      cx.spawn(async (cx) => {
+        try {
+          await makeAppIcons(dockApps().map((a) => a.path));
+        } catch {}
+        cx.notify();
+      });
     this.size = null;
     this.hover = null;
     this.running = new Set();
