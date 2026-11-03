@@ -20,7 +20,7 @@ import { h_flex } from "gpui-base";
 import { spaces, agents, run, shared, exec } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, oval, vgrad, programIcon, leadProgram, countBadge, openMenu, closeMenus, menuSize,
-  spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, makeAppIcons, openWin, winState, WIN_APPS, openSlackTab, openLinearTab, slackTab, linearTab, builtinApp, seedBuiltinApps,
+  spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, makeAppIcons, openWin, winState, WIN_APPS, openSlackTab, openLinearTab, slackTab, linearTab, builtinApp, seedBuiltinApps, fetchBuiltinIcons, appImage,
   STATUS_WORD, tabLabel, pref, dockHeight,
 } from "./kit.js";
 import { withStatus, urgentAgent, agentName, agentSpace, showNotice } from "./notice.js";
@@ -64,6 +64,9 @@ export default class Dock {
   init(_p, cx) {
     // Linear (built into this layout) joins the Dock once, as an installed app would.
     seedBuiltinApps();
+    cx.spawn(async (cx) => {
+      if (await fetchBuiltinIcons()) cx.notify();
+    });
     // The Dock apps' icons live in the mod's folder, so a fresh copy of the mod has none:
     // make the missing ones (it skips those already there), then draw again.
     if (dockApps().length)
@@ -272,7 +275,7 @@ export default class Dock {
     if (it.kind === "trash") return image(ICON.trash).w(s).h(s);
     if (it.kind === "win") return miniWindow(s, it.program);
     if (it.kind === "winmin") return miniWindow(s, null, it.app?.icon ? appIcon(it.app.path) : null, it.win);
-    if (it.kind === "dapp") return it.app.icon ? image(appIcon(it.app.path)).w(s).h(s) : plainApp(s, it.label);
+    if (it.kind === "dapp") return it.app.icon ? appImage(it.app.path, s) : plainApp(s, it.label);
     const sp = it.space;
     const agent = it.program && !it.program.shell && it.program.key !== "shell";
     // The folder, its initials engraved on the front like Applications' "A".

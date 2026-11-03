@@ -15,7 +15,7 @@ import { h_flex, v_flex, InputState, Input, TextView, v_virtual_list, VirtualLis
 import { props, exec, closeOverlay, run } from "herdr";
 import {
   C, FONT, GLYPH, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, aquaButton, closeMenus, openMenu, winState, setWin,
-  closeWin, zoomWin, startTornResize, dockApps, appIcon, appName, openWin, appTab, aquaScrollbar, dragScroll, endScroll, builtinApp,
+  closeWin, zoomWin, startTornResize, dockApps, appIcon, appName, openWin, appTab, aquaScrollbar, dragScroll, endScroll, builtinApp, appImage,
 } from "./kit.js";
 import { KEEP, KEYCHAIN, DEMO, Q, gql, plain, savedKey, signIn, forget, setUnread, linearShown } from "./linearapi.js";
 
@@ -609,7 +609,7 @@ export default class Linear {
           .items_center()
           .px(80)
           .gap(5)
-          .when(Boolean(app?.icon), (el) => el.child(image(appIcon(app.path)).flex_none().w(16).h(16).opacity(live ? 1 : 0.6)))
+          .when(Boolean(app?.icon), (el) => el.child(div().flex_none().opacity(live ? 1 : 0.6).child(appImage(app.path, 16))))
           .child(embossed(title, { size: 13, color: live ? "#000000" : "#4d4d4d", truncate: true })),
       )
       .child(div().absolute().top(4).left(8).child(this.lights(live)))

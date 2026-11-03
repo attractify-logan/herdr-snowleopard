@@ -14,7 +14,7 @@ import { div, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { props, closeOverlay, run, spaces, agents, panes, updates, home } from "herdr";
 import {
-  C, FONT, ICON, paint, rrect, vgrad, aquaButton, programIcon, plural, base, dockApps, addDockApp, removeDockApp, listApps, makeAppIcons, builtinApp, BUILTIN_APPS,
+  C, FONT, ICON, paint, rrect, vgrad, aquaButton, programIcon, plural, base, dockApps, addDockApp, removeDockApp, listApps, makeAppIcons, builtinApp, BUILTIN_APPS, appImage,
   appIcon, appName, pref, setPref, tabLabel, openSheet, bead, statusMark,
 } from "./kit.js";
 
@@ -348,7 +348,7 @@ export default class Sheet {
             .child(paint(rrect(12, 12, 2, 1, 1), on ? vgrad("#7fb2f2", "#2f6fd6") : vgrad("#ffffff", "#e3e3e3"), 14, 14))
             .when(on, (el) => el.child(div().absolute().top(-2).left(2).text_size(12).font_weight(700).text_color("#ffffff").child("✓"))),
         )
-        .child(hasIcon(path) ? image(appIcon(path)).flex_none().w(20).h(20) : div().flex_none().w(20).h(20))
+        .child(hasIcon(path) ? appImage(path, 20) : div().flex_none().w(20).h(20))
         .child(div().flex_1().min_w(0).truncate().text_size(12).child(appName(path)))
         // Obsidian and Slack open as windows inside Herdr (kit.js WIN_APPS), not in their own apps.
         .child(div().flex_none().text_size(10).text_color(C.gray).child(path.startsWith("/System/") ? "System" : ["Obsidian", "Slack", "Linear"].includes(appName(path)) ? "Opens inside Herdr" : ""))

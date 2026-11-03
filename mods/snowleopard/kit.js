@@ -1413,7 +1413,32 @@ export function dockApps() {
 }
 
 // Apps built into this layout (no bundle of their own) sit in the Dock as "herdr:<Name>".
-export const BUILTIN_APPS = { Linear: { path: "herdr:Linear", icon: ICON.linearApp } };
+// Their real icon is fetched once from the service into the hidden icon folder, as an
+// installed app's is made from its bundle; until then (or offline) a drawn one stands in.
+export const BUILTIN_APPS = { Linear: { path: "herdr:Linear", icon: ICON.linearApp, fetch: "https://linear.app/static/apple-touch-icon.png" } };
+const FETCHED = (globalThis.__snowleopardBuiltinIcons ??= {});
+
+/** Fetches the built-in apps' icons that aren't there yet. True when one became ready. */
+export async function fetchBuiltinIcons() {
+  let changed = false;
+  for (const [name, b] of Object.entries(BUILTIN_APPS)) {
+    if (!b.fetch) continue;
+    const r = await exec("/bin/sh", ["-c", '[ -s "$1" ] || { mkdir -p "$(dirname "$1")" && curl -fsSL -m 15 "$2" -o "$1.part" && mv "$1.part" "$1"; }; [ -s "$1" ] && echo ok', "sh", `${appHome()}/${APP_ICONS}/${name}.png`, b.fetch]).catch(() => null);
+    const ok = (r?.stdout ?? "").includes("ok");
+    if (ok !== Boolean(FETCHED[name])) changed = true;
+    FETCHED[name] = ok;
+  }
+  return changed;
+}
+
+/** An app's icon at s px: a fetched built-in one is square, so it's inset and rounded as a Mac icon is. */
+export function appImage(path, s) {
+  if (builtinApp(path) && FETCHED[appName(path)]) {
+    const m = Math.round(s * 0.09);
+    return div().flex_none().w(s).h(s).p(m).child(image(appIcon(path)).w(s - 2 * m).h(s - 2 * m).rounded(Math.round((s - 2 * m) * 0.225)));
+  }
+  return image(appIcon(path)).flex_none().w(s).h(s);
+}
 
 export function builtinApp(path) {
   return String(path ?? "").startsWith("herdr:");
@@ -1435,7 +1460,7 @@ export function appName(path) {
 }
 
 export function appIcon(path) {
-  if (builtinApp(path)) return BUILTIN_APPS[appName(path)]?.icon ?? ICON.herdr;
+  if (builtinApp(path)) return FETCHED[appName(path)] ? `${APP_ICONS}/${appName(path)}.png` : BUILTIN_APPS[appName(path)]?.icon ?? ICON.herdr;
   return `${APP_ICONS}/${appName(path).replace(/[^A-Za-z0-9_.-]/g, "_")}.png`;
 }
 

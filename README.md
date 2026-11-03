@@ -57,7 +57,7 @@ and Dock icon runs a real Herdr command.
   Use your User OAuth Token (`xoxp-`): a bot token shows the bot's
   conversations, not yours.
 - **Linear (beta).** Linear sits in the Dock as an app of its own (no Linear
-  app needed; Remove from Dock and Dock Applications… take it out and put it
+  app needed; its icon is fetched from linear.app the first time; Remove from Dock and Dock Applications… take it out and put it
   back). Its icon, or Window › Linear, opens Linear as a tab, or from its
   right-click menu in its own Aqua window, laid out as Mail is:
   Inbox, My Issues, each team and each active project in a source list, the
