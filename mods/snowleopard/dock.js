@@ -12,7 +12,7 @@
 // sit beside Herdr: click opens one, right-click opens the shown space's
 // folder in it (Obsidian as a vault), and a light shows the running ones.
 // Some apps open a window of their own inside Herdr (WIN_APPS): Obsidian's
-// icon opens the vault (notes.js), Slack's opens Slack (slack.js); their menus
+// icon opens the vault (notes.js), Slack's opens Slack (slack.js), Linear's Linear (linear.js); their menus
 // still open the real app. A minimized one waits by the Trash.
 
 import { div, image, PathBuilder } from "gpui-kit";
@@ -20,11 +20,12 @@ import { h_flex } from "gpui-base";
 import { spaces, agents, run, shared, exec } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, oval, vgrad, programIcon, leadProgram, countBadge, openMenu, closeMenus, menuSize,
-  spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, makeAppIcons, openWin, winState, WIN_APPS, openSlackTab,
+  spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, makeAppIcons, openWin, winState, WIN_APPS, openSlackTab, openLinearTab,
   STATUS_WORD, tabLabel, pref, dockHeight,
 } from "./kit.js";
 import { withStatus, urgentAgent, agentName, agentSpace, showNotice } from "./notice.js";
 import { watchSlack, slackBadge } from "./slackwatch.js";
+import { watchLinear, linearBadge } from "./linearapi.js";
 
 const ICON_SIZE = 48;
 const GAP = 8;
@@ -92,6 +93,8 @@ export default class Dock {
     cx.timer.every(4000, (cx) => this.poll(cx));
     // Slack's unread messages, for its badge here and its banners (slackwatch.js).
     watchSlack(cx);
+    // Linear's unread inbox, for its badge here (linearapi.js).
+    watchLinear(cx);
   }
 
   poll(cx) {
@@ -185,6 +188,8 @@ export default class Dock {
     return [
       ...(win === "slack"
         ? [{ label: "Open Slack in a Tab", act: { slackTab: true } }, { label: "Open Slack in a Window", act: { win } }, { label: "Open Slack App", act: { launch: [it.app.path] } }]
+        : win === "linear"
+        ? [{ label: "Open Linear in a Tab", act: { linearTab: true } }, { label: "Open Linear in a Window", act: { win } }, { label: "Open Linear App", act: { launch: [it.app.path] } }]
         : win
         ? [{ label: win === "notes" ? "Open Vault in Herdr" : `Open ${it.label} in Herdr`, act: { win } }, { label: `Open ${it.label} App`, act: { launch: [it.app.path] } }]
         : [{ label: "Open", act: { launch: [it.app.path] } }]),
@@ -200,7 +205,7 @@ export default class Dock {
   items() {
     const ags = agents();
     const list = [{ kind: "app", id: "herdr", label: "Herdr" }];
-    for (const a of dockApps()) list.push({ kind: "dapp", id: `app-${a.path}`, label: a.name, app: a, count: WIN_APPS[appName(a.path)] === "slack" ? slackBadge() : 0 });
+    for (const a of dockApps()) list.push({ kind: "dapp", id: `app-${a.path}`, label: a.name, app: a, count: WIN_APPS[appName(a.path)] === "slack" ? slackBadge() : WIN_APPS[appName(a.path)] === "linear" ? linearBadge() : 0 });
     for (const s of spaces()) {
       const mine = ags.filter((a) => a.space === s.id);
       // The folder wears the most urgent agent's badge: blocked, then done, working, the first.
@@ -222,12 +227,12 @@ export default class Dock {
       if (!info) continue;
       list.push({ kind: "win", id: `win-${id}`, tab: id, label: `${info.space.name} — ${tabLabel(info.space.id, info.tab)}`, program: leadProgram(info.space.id, id) });
     }
-    // Notes and Slack wait here whether or not Obsidian and Slack are in the Dock.
-    for (const win of ["notes", "slack"]) {
+    // Notes, Slack and Linear wait here whether or not their apps are in the Dock.
+    for (const win of ["notes", "slack", "linear"]) {
       if (!winState(win).min) continue;
       const app = dockApps().find((a) => WIN_APPS[appName(a.path)] === win) ?? null;
       const last = winState(win).last;
-      list.push({ kind: "winmin", id: `winmin-${win}`, win, label: last ? last.split("/").pop().replace(/\.md$/i, "") : app?.name ?? (win === "notes" ? "Notes" : "Slack"), app });
+      list.push({ kind: "winmin", id: `winmin-${win}`, win, label: last ? last.split("/").pop().replace(/\.md$/i, "") : app?.name ?? { notes: "Notes", slack: "Slack", linear: "Linear" }[win], app });
     }
     list.push({ kind: "trash", id: "trash", label: "Trash" });
     return list;
@@ -359,6 +364,8 @@ export default class Dock {
       // Slack goes in a tab, which the main window can cover; its menu offers a window.
       if (win === "slack" && winState("slack").min) openWin("slack");
       else if (win === "slack" && !winState("slack").open) openSlackTab();
+      else if (win === "linear" && winState("linear").min) openWin("linear");
+      else if (win === "linear" && !winState("linear").open) openLinearTab();
       else if (win) openWin(win);
       else exec("open", ["-a", it.app.path]).catch(() => {});
     }
@@ -458,6 +465,12 @@ function miniWindow(s, program, badge = null, kind = "terminal") {
   if (kind === "terminal") el = el.child(div().absolute().top(y + 13).left(4).text_size(6).font_family("Menlo").text_color("#c8c8c8").child("$ _"));
   // A page of ruled gray lines; Slack's source list is a gray strip at the left.
   if (kind === "notes") for (let i = 0; i < 4; i++) el = el.child(div().absolute().top(y + 14 + i * 4).left(5).w(i === 3 ? 16 : w - 12).h(1).bg("#b4b4b4"));
+  // Linear's: a source list, a table over the issue.
+  if (kind === "linear") {
+    el = el.child(div().absolute().top(y + 10).left(1).w(9).h(bodyH).bg("#dee4ea"));
+    for (let i = 0; i < 3; i++) el = el.child(div().absolute().top(y + 12 + i * 3).left(12).w(w - 15).h(2).bg(i === 1 ? "#5f95d9" : "#e3e8f2"));
+    el = el.child(div().absolute().top(y + 22).left(12).w(w - 15).h(1).bg("#9a9a9a"));
+  }
   if (kind === "slack") {
     el = el.child(div().absolute().top(y + 10).left(1).w(11).h(bodyH).bg("#4a3a5c"));
     for (let i = 0; i < 3; i++) el = el.child(div().absolute().top(y + 14 + i * 5).left(16).w(i === 1 ? 14 : 22).h(1).bg("#b4b4b4"));
@@ -467,6 +480,9 @@ function miniWindow(s, program, badge = null, kind = "terminal") {
     .when(Boolean(badge), (e) => e.child(image(badge).absolute().bottom(2).right(0).w(s * 0.38).h(s * 0.38)))
     // No app icon to badge it with: the notes glyph, or Slack's # on its aubergine.
     .when(!badge && kind === "notes", (e) => e.child(image(ICON.note).absolute().bottom(2).right(0).w(s * 0.38).h(s * 0.38)))
+    .when(!badge && kind === "linear", (e) =>
+      e.child(div().absolute().bottom(2).right(0).w(s * 0.38).h(s * 0.38).rounded(4).bg("#5e6ad2").flex().items_center().justify_center().font_family("Helvetica").font_weight(700).text_size(s * 0.24).text_color("#ffffff").child("L")),
+    )
     .when(!badge && kind === "slack", (e) =>
       e.child(div().absolute().bottom(2).right(0).w(s * 0.38).h(s * 0.38).rounded(4).bg("#4a154b").flex().items_center().justify_center().font_family("Helvetica").font_weight(700).text_size(s * 0.26).text_color("#ffffff").child("#")),
     );

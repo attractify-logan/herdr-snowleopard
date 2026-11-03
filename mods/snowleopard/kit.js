@@ -91,6 +91,9 @@ export const GLYPH = {
   close: `${A}/icons/x.svg`,
   minus: `${A}/icons/minus.svg`,
   grip: `${A}/icons/grip.svg`,
+  inbox: `${A}/icons/inbox.svg`,
+  person: `${A}/icons/person.svg`,
+  project: `${A}/icons/project.svg`,
 };
 
 /** Is the Herdr window key? Inactive windows go flat and gray, as in Aqua.
@@ -782,6 +785,9 @@ export function perform(act) {
   if (act.unDock) removeDockApp(act.unDock);
   if (act.win) openWin(act.win);
   if (act.slackTab) openSlackTab();
+  if (act.linearTab) openLinearTab();
+  // A Linear issue's field picked from its menu: the Linear window applies it (linear.js).
+  if (act.linearPick) setWin("linear", { pick: { ...act.linearPick, at: Date.now() } });
   if (act.mergeAll) mergeAll();
   if (act.pref) setPref(act.pref[0], act.pref[1]);
   if (act.newSpaceIn)
@@ -1302,16 +1308,17 @@ export function startTear(tabId, e, name = "") {
 // ---- app windows
 //
 // Aqua windows for an app's content inside Herdr, opened from its Dock icon:
-// "notes" (the Obsidian vault, notes.js) and "slack" (slack.js). Each is an
+// "notes" (the Obsidian vault, notes.js), "slack" (slack.js) and "linear"
+// (linear.js). Each is an
 // overlay window like a torn-off tab's, its role named after it, with shared
 // "sl.<name>" = { open, min, big, at, w, h, ... }: whether it's showing,
 // minimized to the Dock or zoomed, where it sits and how big, plus the
 // window's own memory (the notes window's last note).
 
-const APP_WIN = { notes: { w: 860, h: 560 }, slack: { w: 900, h: 600 } };
+const APP_WIN = { notes: { w: 860, h: 560 }, slack: { w: 900, h: 600 }, linear: { w: 980, h: 640 } };
 
 /** The Dock app whose icon opens each window. */
-export const WIN_APPS = { Obsidian: "notes", Slack: "slack" };
+export const WIN_APPS = { Obsidian: "notes", Slack: "slack", Linear: "linear" };
 
 export function winState(name) {
   return shared(`sl.${name}`) ?? {};
@@ -1353,24 +1360,29 @@ export function zoomWin(name, overlay, extra = {}) {
   openWin(name, { big, ...extra });
 }
 
-/** The tab showing Slack (a snowleopard mod pane in a tab named Slack), if any. */
-export function slackTab() {
+/** The tab showing an app window's view (a snowleopard mod pane in a tab of that name), if any. */
+export function appTab(name) {
   for (const s of spaces())
     for (const t of s.tabs)
-      if (t.name === "Slack" && panes().some((p) => p.tab === t.id && p.mod === "snowleopard")) return { space: s, tab: t };
+      if (t.name === name && panes().some((p) => p.tab === t.id && p.mod === "snowleopard")) return { space: s, tab: t };
   return null;
 }
 
-/** Slack as a tab in the main window: goes to it, or makes one in the shown space. */
-export function openSlackTab() {
-  const at = slackTab();
+/** An app window's view as a tab in the main window: goes to it, or makes one in the shown space. */
+export function openAppTab(name, role) {
+  const at = appTab(name);
   if (at) {
     run("space.select", { id: at.space.id });
     run("tab.select", { id: at.tab.id });
     return;
   }
-  run("tab.new", { name: "Slack", mod: "snowleopard", props: { role: "slack", inTab: true } });
+  run("tab.new", { name, mod: "snowleopard", props: { role, inTab: true } });
 }
+
+export const slackTab = () => appTab("Slack");
+export const openSlackTab = () => openAppTab("Slack", "slack");
+export const linearTab = () => appTab("Linear");
+export const openLinearTab = () => openAppTab("Linear", "linear");
 
 /** A new frame from the grip: reopened in place at the new size. */
 export function resizeWin(name, f) {

@@ -250,10 +250,11 @@ export default class MenuBar {
                 ...wins.map((w) => ({ label: w.tab.named ? w.tab.name : `Tab ${w.tab.name}`, detail: out[w.tab.id].min ? "in the Dock" : w.space.name, act: { raise: w.tab.id } })),
               ]
             : []),
-          // Notes and Slack open inside Herdr, so they're reachable without the real apps.
+          // Notes, Slack and Linear open inside Herdr, so they're reachable without the real apps.
           { sep: true },
           { label: "Notes", checked: Boolean(winState("notes").open), detail: winState("notes").min ? "in the Dock" : "", act: { win: "notes" } },
           { label: "Slack", checked: Boolean(winState("slack").open), detail: winState("slack").min ? "in the Dock" : "", act: winState("slack").open || winState("slack").min ? { win: "slack" } : { slackTab: true } },
+          { label: "Linear", checked: Boolean(winState("linear").open), detail: winState("linear").min ? "in the Dock" : "", act: winState("linear").open || winState("linear").min ? { win: "linear" } : { linearTab: true } },
         ];
       }
       case "help":

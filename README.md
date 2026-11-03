@@ -56,6 +56,17 @@ and Dock icon runs a real Herdr command.
   conversation, 10 s for the watch), so there are no huddles or file uploads.
   Use your User OAuth Token (`xoxp-`): a bot token shows the bot's
   conversations, not yours.
+- **Linear (beta).** Window › Linear (or Linear's icon, with Linear in the
+  Dock) opens Linear as a tab, or in its own Aqua window, laid out as Mail is:
+  Inbox, My Issues, each team and each active project in a source list, the
+  open issues in a table above, and the selected one below with its
+  description, comments and a field to reply. Its status, priority and
+  assignee pop up menus to change them; ↑ and ↓ walk the list, ⌘R checks now.
+  Opening a notification marks it read, and the Dock's Linear icon shows the
+  unread count. It signs in with a personal API key (the setup panel opens
+  Linear's settings) kept in your Keychain, and checks every 30 s while it's
+  on screen. Pictures show as links, and new issues, labels and cycles are
+  made in Linear itself (Open in Linear).
 - **Dock applications.** View › Dock Applications… keeps any app in the Dock
   beside Herdr, with a light under the running ones. Right-click one to open
   the shown space's folder in it.
