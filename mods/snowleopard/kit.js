@@ -634,6 +634,14 @@ export function programIcon(program, size, o = {}) {
     );
 }
 
+/** A tab's icon in lists: an app's view in a tab (Linear, Slack) shows that app's icon,
+ *  as the Dock does; any other tab its lead program's. */
+export function tabIcon(spaceId, tab, size) {
+  const app = WIN_APPS[tab.name] && panes().some((p) => p.tab === tab.id && p.mod === "snowleopard");
+  const path = app ? dockApps().find((a) => appName(a.path) === tab.name)?.path ?? BUILTIN_APPS[tab.name]?.path : null;
+  return path ? appImage(path, size) : programIcon(leadProgram(spaceId, tab.id), size, { small: true });
+}
+
 /** Herdr's status words, as people read them. */
 export const STATUS_WORD = { working: "Working", blocked: "Needs you", done: "Done", idle: "Idle" };
 

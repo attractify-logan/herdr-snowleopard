@@ -11,7 +11,7 @@ import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, Scrollbar } from "gpui-base";
 import { spaces, agents, machines, panes, run, setAgentOrder } from "herdr";
 import {
-  C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, pill, statusMark, programIcon, openMenu,
+  C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, pill, statusMark, programIcon, tabIcon, openMenu,
   closeMenus, textured, menuSize, spaceItems, remoteSpaceItems, tabLabel, askCloseTab,
   torn, raiseTorn, tabClose, leadProgram, shortcut, contextLevels, gauge,
 } from "./kit.js";
@@ -252,7 +252,7 @@ export default class Sidebar {
               this.row(`tb-${t.id}`, {
                 indent: 36,
                 selected: s.active && t.active && !out[t.id],
-                icon: programIcon(leadProgram(s.id, t.id), 14, { small: true }),
+                icon: tabIcon(s.id, t, 14),
                 label: out[t.id] ? `${named} (window)` : named,
                 mark: t.status ? statusMark(t.status, { selected: s.active && t.active }) : null,
                 onClick: () => {
