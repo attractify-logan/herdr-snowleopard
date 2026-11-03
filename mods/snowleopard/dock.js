@@ -20,7 +20,7 @@ import { h_flex } from "gpui-base";
 import { spaces, agents, run, shared, exec } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, oval, vgrad, programIcon, leadProgram, countBadge, openMenu, closeMenus, menuSize,
-  spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, makeAppIcons, openWin, winState, WIN_APPS, openSlackTab, openLinearTab,
+  spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, makeAppIcons, openWin, winState, WIN_APPS, openSlackTab, openLinearTab, slackTab, linearTab, builtinApp, seedBuiltinApps,
   STATUS_WORD, tabLabel, pref, dockHeight,
 } from "./kit.js";
 import { withStatus, urgentAgent, agentName, agentSpace, showNotice } from "./notice.js";
@@ -62,6 +62,8 @@ const RANK = { blocked: 0, done: 1, working: 2 };
 
 export default class Dock {
   init(_p, cx) {
+    // Linear (built into this layout) joins the Dock once, as an installed app would.
+    seedBuiltinApps();
     // The Dock apps' icons live in the mod's folder, so a fresh copy of the mod has none:
     // make the missing ones (it skips those already there), then draw again.
     if (dockApps().length)
@@ -183,8 +185,18 @@ export default class Dock {
 
   appItems(it) {
     const s = spaces().find((x) => x.active);
-    const here = s && !s.machine && s.folder;
+    const here = s && !s.machine && s.folder && !builtinApp(it.app.path);
     const win = WIN_APPS[appName(it.app.path)];
+    if (builtinApp(it.app.path) && win === "linear")
+      return [
+        { label: "Open Linear in a Tab", act: { linearTab: true } },
+        { label: "Open Linear in a Window", act: { win } },
+        { label: "Open Linear in the Browser", act: { open: "https://linear.app" } },
+        { sep: true },
+        { label: "Remove from Dock", act: { unDock: it.app.path } },
+        { sep: true },
+        { label: "Dock Applications…", act: { sheet: ["dockapps", {}] } },
+      ];
     return [
       ...(win === "slack"
         ? [{ label: "Open Slack in a Tab", act: { slackTab: true } }, { label: "Open Slack in a Window", act: { win } }, { label: "Open Slack App", act: { launch: [it.app.path] } }]
@@ -414,7 +426,9 @@ export default class Dock {
         continue;
       }
       if (it.kind === "app") kids.push(this.light(x, false));
-      const winOpen = Boolean(winState(WIN_APPS[appName(it.app?.path ?? "")] ?? "none").open);
+      // An app open inside Herdr is running too: its window, or Slack's or Linear's tab.
+      const inside = WIN_APPS[appName(it.app?.path ?? "")] ?? "none";
+      const winOpen = Boolean(winState(inside).open) || (inside === "slack" && Boolean(slackTab())) || (inside === "linear" && Boolean(linearTab()));
       if (it.kind === "dapp" && (this.running.has(it.app.path) || winOpen)) kids.push(this.light(x, false));
       if (it.kind === "space" && (it.running || it.space.active)) kids.push(this.light(x, it.space.active));
       kids.push(this.icon(it, x).top(top - ICON_SIZE + 9));

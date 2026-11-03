@@ -70,6 +70,7 @@ export const ICON = {
   terminal: `${A}/icons/terminal.svg`,
   trash: `${A}/icons/trash.svg`,
   herdr: `${A}/img/herdr.png`,
+  linearApp: `${A}/icons/linear-app.svg`,
 };
 
 export const GLYPH = {
@@ -1411,11 +1412,30 @@ export function dockApps() {
   return shared("sl.dockApps") ?? [];
 }
 
+// Apps built into this layout (no bundle of their own) sit in the Dock as "herdr:<Name>".
+export const BUILTIN_APPS = { Linear: { path: "herdr:Linear", icon: ICON.linearApp } };
+
+export function builtinApp(path) {
+  return String(path ?? "").startsWith("herdr:");
+}
+
+/** The built-in apps go in the Dock once, as Obsidian and Slack would if installed; removing one keeps it out. */
+export function seedBuiltinApps() {
+  const seeded = shared("sl.builtinsSeeded") ?? [];
+  const todo = Object.keys(BUILTIN_APPS).filter((n) => !seeded.includes(n));
+  if (!todo.length) return;
+  let apps = dockApps();
+  for (const n of todo) if (!apps.some((a) => appName(a.path) === n)) apps = [...apps, { path: BUILTIN_APPS[n].path, name: n, icon: true }];
+  setShared("sl.dockApps", apps);
+  setShared("sl.builtinsSeeded", [...seeded, ...todo]);
+}
+
 export function appName(path) {
-  return path.split("/").pop().replace(/\.app$/, "");
+  return path.replace(/^herdr:/, "").split("/").pop().replace(/\.app$/, "");
 }
 
 export function appIcon(path) {
+  if (builtinApp(path)) return BUILTIN_APPS[appName(path)]?.icon ?? ICON.herdr;
   return `${APP_ICONS}/${appName(path).replace(/[^A-Za-z0-9_.-]/g, "_")}.png`;
 }
 
@@ -1432,7 +1452,7 @@ ls "$out"`;
 
 /** Makes the icons these apps lack; resolves with the icon file names there are. */
 export async function makeAppIcons(paths) {
-  const r = await exec("/bin/sh", ["-c", ICON_SH, "sh", `${appHome()}/${APP_ICONS}`, ...paths]);
+  const r = await exec("/bin/sh", ["-c", ICON_SH, "sh", `${appHome()}/${APP_ICONS}`, ...paths.filter((p) => !builtinApp(p))]);
   return new Set(r.stdout.split("\n").filter(Boolean));
 }
 
@@ -1450,6 +1470,7 @@ export async function listApps() {
 
 export function addDockApp(path) {
   if (dockApps().some((a) => a.path === path)) return;
+  if (builtinApp(path)) return setShared("sl.dockApps", [...dockApps(), { path, name: appName(path), icon: true }]);
   setShared("sl.dockApps", [...dockApps(), { path, name: appName(path), icon: false }]);
   // Its icon, made now if the picker hasn't yet; the Dock shows it once it's there.
   makeAppIcons([path])
@@ -1466,6 +1487,7 @@ export function removeDockApp(path) {
 
 /** Opens an app, or a folder in it. Obsidian opens a folder as a vault by URL. */
 export function launch(path, folder = null) {
+  if (builtinApp(path)) return Promise.resolve();
   if (folder && appName(path) === "Obsidian") return exec("open", [`obsidian://open?path=${encodeURIComponent(folder)}`]).catch(() => {});
   return exec("open", ["-a", path, ...(folder ? [folder] : [])]).catch(() => {});
 }

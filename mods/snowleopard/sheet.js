@@ -14,7 +14,7 @@ import { div, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { props, closeOverlay, run, spaces, agents, panes, updates, home } from "herdr";
 import {
-  C, FONT, ICON, paint, rrect, vgrad, aquaButton, programIcon, plural, base, dockApps, addDockApp, removeDockApp, listApps, makeAppIcons,
+  C, FONT, ICON, paint, rrect, vgrad, aquaButton, programIcon, plural, base, dockApps, addDockApp, removeDockApp, listApps, makeAppIcons, builtinApp, BUILTIN_APPS,
   appIcon, appName, pref, setPref, tabLabel, openSheet, bead, statusMark,
 } from "./kit.js";
 
@@ -323,8 +323,11 @@ export default class Sheet {
 
   dockApps() {
     const kept = new Set(dockApps().map((a) => a.path));
-    const hasIcon = (path) => this.icons.has(appIcon(path).split("/").pop());
-    const rows = (this.apps ?? []).map((path, i) => {
+    const hasIcon = (path) => builtinApp(path) || this.icons.has(appIcon(path).split("/").pop());
+    // The built-in apps lead the list, unless the real one is installed (its icon opens the same window).
+    const real = new Set((this.apps ?? []).map(appName));
+    const built = this.apps === null ? [] : Object.entries(BUILTIN_APPS).filter(([n]) => !real.has(n)).map(([, b]) => b.path);
+    const rows = [...built, ...(this.apps ?? [])].map((path, i) => {
       const on = kept.has(path);
       return h_flex()
         .id(`da-${i}`)

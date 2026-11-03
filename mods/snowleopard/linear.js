@@ -15,7 +15,7 @@ import { h_flex, v_flex, InputState, Input, TextView, v_virtual_list, VirtualLis
 import { props, exec, closeOverlay, run } from "herdr";
 import {
   C, FONT, GLYPH, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, aquaButton, closeMenus, openMenu, winState, setWin,
-  closeWin, zoomWin, startTornResize, dockApps, appIcon, appName, openWin, appTab, aquaScrollbar, dragScroll, endScroll,
+  closeWin, zoomWin, startTornResize, dockApps, appIcon, appName, openWin, appTab, aquaScrollbar, dragScroll, endScroll, builtinApp,
 } from "./kit.js";
 import { KEEP, KEYCHAIN, DEMO, Q, gql, plain, savedKey, signIn, forget, setUnread, linearShown } from "./linearapi.js";
 
@@ -574,7 +574,7 @@ export default class Linear {
     const one = Boolean((it && it.url) || KEEP.note);
     if (KEEP.token)
       parts.push(
-        textured([{ id: "ln-web", text: one ? "Open in Linear" : "Open Linear", w: one ? 112 : 92, tooltip: one ? "Open this in Linear" : "Open Linear", onClick: () => (app && !one ? exec("open", ["-a", app.path]) : exec("open", [url])).catch(() => {}) }]),
+        textured([{ id: "ln-web", text: one ? "Open in Linear" : "Open Linear", w: one ? 112 : 92, tooltip: one ? "Open this in Linear" : "Open Linear", onClick: () => (app && !one && !builtinApp(app.path) ? exec("open", ["-a", app.path]) : exec("open", [url])).catch(() => {}) }]),
       );
     if (KEEP.token) parts.push(textured([{ id: "ln-out", text: "Sign Out", w: 70, tooltip: KEEP.token === DEMO ? "Leave the demo" : "Forget the Linear key (it's removed from the Keychain)", onClick: (_e, cx) => cx.spawn((cx) => this.signOut(cx)) }]));
     return parts;
