@@ -16,7 +16,7 @@ import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, TextView, v_virtual_list, VirtualListScrollHandle, Scrollbar } from "gpui-base";
 import { props, exec, closeOverlay, run, shared } from "herdr";
 import {
-  C, FONT, GLYPH, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, aquaButton, closeMenus, openMenu, menuSize, appSize, winState, setWin,
+  C, FONT, GLYPH, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, aquaButton, closeMenus, openMenu, menuSize, appSize, winState, setWin, noteWinSpot,
   closeWin, zoomWin, startTornResize, dockApps, appName, openWin, appTab, aquaScrollbar, dragScroll, endScroll, builtinApp, appImage,
 } from "./kit.js";
 import { KEEP, KEYCHAIN, DEMO, Q, gql, listQuery, manyQuery, plain, savedKey, signIn, forget, setUnread, linearShown } from "./linearapi.js";
@@ -1889,13 +1889,14 @@ export default class Linear {
       })
       .track_focus(this.focus)
       .on_hover((over) => over || endScroll(this.sb))
-      .on_mouse_move((e, cx) => dragScroll(this.sb, e, cx))
+      .on_mouse_move((e, cx) => {
+        dragScroll(this.sb, e, cx);
+        noteWinSpot("linear", e.bounds, cx, true);
+      })
       .on_mouse_up("left", () => endScroll(this.sb))
-      .on_mouse_down("left", (e) => {
+      .on_mouse_down("left", (e, cx) => {
         closeMenus();
-        const b = e.bounds;
-        const n = winState("linear");
-        if (b && !n.big && (n.at?.x !== Math.round(b.x) || n.at?.y !== Math.round(b.y))) setWin("linear", { at: { x: Math.round(b.x), y: Math.round(b.y) } });
+        noteWinSpot("linear", e.bounds, cx);
       })
       .relative()
       .size_full()

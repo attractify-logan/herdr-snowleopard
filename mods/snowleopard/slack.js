@@ -17,7 +17,7 @@ import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, TextView, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { props, exec, closeOverlay, setShared, run } from "herdr";
 import {
-  C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, aquaButton, closeMenus, winState, setWin,
+  C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, aquaButton, closeMenus, winState, setWin, noteWinSpot,
   closeWin, zoomWin, startTornResize, dockApps, appIcon, appName, openWin, slackTab, aquaScrollbar, dragScroll, endScroll,
 } from "./kit.js";
 import { KEEP, KEYCHAIN, slackApi, slackSignIn, loadUsers, loadConvs, unread, markSeen, slackShown } from "./slackwatch.js";
@@ -968,13 +968,14 @@ export default class Slack {
       })
       .track_focus(this.focus)
       .on_hover((over) => over || endScroll(this.sb))
-      .on_mouse_move((e, cx) => dragScroll(this.sb, e, cx))
+      .on_mouse_move((e, cx) => {
+        dragScroll(this.sb, e, cx);
+        noteWinSpot("slack", e.bounds, cx, true);
+      })
       .on_mouse_up("left", () => endScroll(this.sb))
-      .on_mouse_down("left", (e) => {
+      .on_mouse_down("left", (e, cx) => {
         closeMenus();
-        const b = e.bounds;
-        const n = winState("slack");
-        if (b && !n.big && (n.at?.x !== Math.round(b.x) || n.at?.y !== Math.round(b.y))) setWin("slack", { at: { x: Math.round(b.x), y: Math.round(b.y) } });
+        noteWinSpot("slack", e.bounds, cx);
       })
       .relative()
       .size_full()

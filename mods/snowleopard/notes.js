@@ -14,7 +14,7 @@ import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, TextView, EditorState, Editor, v_virtual_list, VirtualListScrollHandle, Scrollbar } from "gpui-base";
 import { props, exec, readTextFile, writeTextFile, closeOverlay } from "herdr";
 import {
-  C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, closeMenus, winState, setWin,
+  C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, closeMenus, winState, setWin, noteWinSpot,
   closeWin, zoomWin, startTornResize, aquaScrollbar, dragScroll, endScroll,
 } from "./kit.js";
 import { obsidianVault } from "./kit.js";
@@ -989,13 +989,14 @@ export default class Notes {
       })
       // A press that reaches here moves the window (Herdr): note where it is
       // first, so the window reopens in place (Herdr keeps the release).
-      .on_mouse_down("left", (e) => {
+      .on_mouse_down("left", (e, cx) => {
         closeMenus();
-        const b = e.bounds;
-        const n = winState("notes");
-        if (b && !n.big && (n.at?.x !== Math.round(b.x) || n.at?.y !== Math.round(b.y))) setWin("notes", { at: { x: Math.round(b.x), y: Math.round(b.y) } });
+        noteWinSpot("notes", e.bounds, cx);
       })
-      .on_mouse_move((e, cx) => dragScroll(this.sb, e, cx))
+      .on_mouse_move((e, cx) => {
+        dragScroll(this.sb, e, cx);
+        noteWinSpot("notes", e.bounds, cx, true);
+      })
       .on_mouse_up("left", () => endScroll(this.sb))
       .track_focus(this.focus)
       .on_key_down((e, cx) => {

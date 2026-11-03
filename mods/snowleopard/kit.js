@@ -977,10 +977,7 @@ function fitWindows(v) {
     const n = winState(name);
     if (!n.open || n.min || n.big || !n.overlay) continue;
     const f = fitBox(n.w ?? APP_WIN[name].w, n.h ?? APP_WIN[name].h, n.at, v);
-    if (!f.moved) continue;
-    setWin(name, { w: f.w, h: f.h, at: f.at });
-    closeOverlay(n.overlay);
-    openWin(name);
+    if (f.moved) moveWinTo(name, f);
   }
   const all = torn();
   for (const [id, t] of Object.entries(all)) {
@@ -1340,8 +1337,7 @@ export function openWin(name, o = {}) {
     mod: "snowleopard",
     kind: "window",
     frame: "none",
-    // As with torn windows, the zoomed one has its own key so it can open centered.
-    key: n.big ? `sl-${name}-big` : `sl-${name}`,
+    key: winKey(name, n),
     keep: true,
     width: n.big ? big?.w ?? WIN.bigW : n.w ?? APP_WIN[name].w,
     height: n.big ? big?.h ?? WIN.bigH : n.h ?? APP_WIN[name].h,
@@ -1350,6 +1346,45 @@ export function openWin(name, o = {}) {
     props: { role: name, big: Boolean(n.big), ...(n.big ? {} : { size: [n.w ?? APP_WIN[name].w, n.h ?? APP_WIN[name].h] }) },
   });
   setWin(name, { ...o, open: true, min: false, overlay, ...(n.big ? {} : { w: n.w, h: n.h, at: n.at }) });
+}
+
+/** An app window's key. Herdr reopens a key where it was last dropped, whatever `at` says,
+ *  so the zoomed window has its own (to open centered), and a window moved back onto the
+ *  desktop gets a fresh one (`gen`) to land where it's put. */
+function winKey(name, n) {
+  return n.big ? `sl-${name}-big` : n.gen ? `sl-${name}-${n.gen}` : `sl-${name}`;
+}
+
+/** Reopens an app window at a fitted frame `f` ({w, h, at}), under a fresh key. */
+function moveWinTo(name, f) {
+  const n = winState(name);
+  setWin(name, { w: f.w, h: f.h, at: f.at, gen: (n.gen ?? 0) + 1 });
+  if (n.overlay) closeOverlay(n.overlay);
+  openWin(name);
+}
+
+const spotWait = {};
+
+/**
+ * Where an app window really is: its root's bounds, from a press on it or the pointer
+ * moving over it (Herdr moves the window itself and keeps the release, so nothing says
+ * where it was dropped). Kept as its spot; and if it hangs off the desktop (dragged past
+ * an edge, where only its buttons would be left to grab), it's moved back on. With
+ * `settle` it waits for the pointer to rest, so a drag under way isn't cut short.
+ */
+export function noteWinSpot(name, b, cx, settle = false) {
+  if (!b) return;
+  const go = () => {
+    const n = winState(name);
+    if (n.big || !n.open || n.min) return;
+    const at = { x: Math.round(b.x), y: Math.round(b.y) };
+    const f = fitBox(n.w ?? APP_WIN[name].w, n.h ?? APP_WIN[name].h, at);
+    if (f.moved) return moveWinTo(name, f);
+    if (n.at?.x !== at.x || n.at?.y !== at.y) setWin(name, { at });
+  };
+  if (!settle) return go();
+  const t = (spotWait[name] = (spotWait[name] ?? 0) + 1);
+  cx.timer.after(400, () => t === spotWait[name] && go());
 }
 
 export function closeWin(name, overlay, min = false, extra = {}) {
