@@ -22,30 +22,60 @@ export const KEEP = (globalThis.__snowleopardLinear ??= {
   teams: [], // [{ id, key, name, states: [{ id, name, type, color, position }] }]
   users: [], // [{ id, name }]
   projects: [],
-  lists: new Map(), // source key → rows
+  lists: new Map(), // list key (a source, and for issues |open, |closed or |all) → rows
   src: null,
   sel: null, // the selected row's id
   issue: null, // the open issue, in full
   note: null, // the open notification, when it isn't about an issue
   unread: 0,
   at: 0, // when teams, people and projects were loaded
+  term: null, // the last search of all of Linear
+  found: 0, // how many issues it matched in all
+  more: new Map(), // list key → Linear has more than it sent
+  undo: null, // the last change, as the pick that takes it back (⌘Z)
+  archived: new Map(), // notification id → { r: row, i: where it was }, for undo
 });
 const W = (globalThis.__snowleopardLinearWatch ??= { owner: null, beat: 0, busy: 0, keyAt: 0 });
 
 // The issue fields a list row shows.
-const ROW = `fragment Row on Issue { id identifier title priority updatedAt url state { id name type color } assignee { id name displayName } team { id key } }`;
-const OPEN = `state: { type: { nin: ["completed", "canceled", "duplicate"] } }`;
+const ROW = `fragment Row on Issue { id identifier title priority updatedAt completedAt canceledAt url branchName state { id name type color } assignee { id name displayName } team { id key } }`;
+// Search answers in its own type, with the same fields.
+const SROW = `fragment SRow on IssueSearchResult { id identifier title priority updatedAt completedAt canceledAt url branchName state { id name type color } assignee { id name displayName } team { id key } }`;
+const DONE = `["completed", "canceled", "duplicate"]`;
+// Which issues a list shows: open (the default), closed, or all.
+const SHOW = {
+  open: { name: "", filter: `state: { type: { nin: ${DONE} } }`, first: 100 },
+  closed: { name: "Closed", filter: `state: { type: { in: ${DONE} } }`, first: 50 },
+  all: { name: "All", filter: "", first: 100 },
+};
+
+/** A list's query: My Issues, a team's or a project's, open, closed or all. */
+export function listQuery(kind, show = "open") {
+  const s = SHOW[show] ?? SHOW.open;
+  const list = (f) => `(first: ${s.first}, orderBy: updatedAt${f || s.filter ? `, filter: { ${[f, s.filter].filter(Boolean).join(", ")} }` : ""}) { nodes { ...Row } pageInfo { hasNextPage } }`;
+  if (kind === "team") return `query Team${s.name}($id: ID!) { notificationsUnreadCount issues${list("team: { id: { eq: $id } }")} } ${ROW}`;
+  if (kind === "project") return `query Project${s.name}($id: ID!) { notificationsUnreadCount issues${list("project: { id: { eq: $id } }")} } ${ROW}`;
+  return `query Mine${s.name} { notificationsUnreadCount viewer { assignedIssues${list("")} } } ${ROW}`;
+}
+
+/** One request that changes many notifications at once: each one an aliased mutation. */
+export function manyQuery(op, field, ids, withAt) {
+  const vars = ids.map((_id, i) => `$i${i}: String!`).join(", ");
+  const body = ids.map((_id, i) => `n${i}: ${field}(id: $i${i}${withAt ? ", input: { readAt: $at }" : ""}) { success }`).join(" ");
+  return `mutation ${op}(${withAt ? "$at: DateTime, " : ""}${vars}) { ${body} }`;
+}
 
 export const Q = {
   me: `query Me { viewer { id name displayName organization { name urlKey } } teams(first: 50) { nodes { id key name states { nodes { id name type color position } } } } users(first: 250, filter: { active: { eq: true } }) { nodes { id name displayName } } projects(first: 50, orderBy: updatedAt, filter: { status: { type: { in: ["backlog", "planned", "started"] } } }) { nodes { id name progress targetDate url status { name type } lead { name displayName } } } }`,
-  mine: `query Mine { notificationsUnreadCount viewer { assignedIssues(first: 100, orderBy: updatedAt, filter: { ${OPEN} }) { nodes { ...Row } } } } ${ROW}`,
-  team: `query Team($id: ID!) { notificationsUnreadCount issues(first: 100, orderBy: updatedAt, filter: { team: { id: { eq: $id } }, ${OPEN} }) { nodes { ...Row } } } ${ROW}`,
-  project: `query Project($id: ID!) { notificationsUnreadCount issues(first: 100, orderBy: updatedAt, filter: { project: { id: { eq: $id } }, ${OPEN} }) { nodes { ...Row } } } ${ROW}`,
-  inbox: `query Inbox { notificationsUnreadCount notifications(first: 60) { nodes { id type readAt createdAt title subtitle url actor { name displayName } ... on IssueNotification { issue { ...Row } } } } } ${ROW}`,
+  inbox: `query Inbox { notificationsUnreadCount notifications(first: 100) { nodes { id type readAt createdAt title subtitle url actor { name displayName } ... on IssueNotification { issue { ...Row } } } } } ${ROW}`,
+  search: `query Search($t: String!) { searchIssues(term: $t, first: 50, includeArchived: false, orderBy: updatedAt) { totalCount nodes { ...SRow } } } ${SROW}`,
   issue: `query Issue($id: String!) { issue(id: $id) { ...Row description createdAt creator { name displayName } project { id name } labels { nodes { name color } } comments(first: 100) { nodes { id body createdAt user { name displayName } botActor { name } parent { id } } } } } ${ROW}`,
   update: `mutation Update($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success issue { ...Row } } } ${ROW}`,
   comment: `mutation Comment($input: CommentCreateInput!) { commentCreate(input: $input) { success } }`,
-  read: `mutation Read($id: String!, $at: DateTime!) { notificationUpdate(id: $id, input: { readAt: $at }) { success } }`,
+  // readAt null marks it unread again.
+  read: `mutation Read($id: String!, $at: DateTime) { notificationUpdate(id: $id, input: { readAt: $at }) { success } }`,
+  archive: `mutation Archive($id: String!) { notificationArchive(id: $id) { success } }`,
+  unarchive: `mutation Unarchive($id: String!) { notificationUnarchive(id: $id) { success } }`,
   unread: `query Unread { notificationsUnreadCount }`,
 };
 
@@ -128,7 +158,7 @@ export async function signIn(token) {
 }
 
 export function forget() {
-  Object.assign(KEEP, { token: null, me: null, teams: [], users: [], projects: [], lists: new Map(), src: null, sel: null, issue: null, note: null, unread: 0, at: 0 });
+  Object.assign(KEEP, { token: null, me: null, teams: [], users: [], projects: [], lists: new Map(), src: null, sel: null, issue: null, note: null, unread: 0, at: 0, term: null, found: 0, more: new Map(), undo: null, archived: new Map() });
   setShared("sl.linearUnread", 0);
 }
 

@@ -493,7 +493,7 @@ export function statusMark(status, o = {}) {
 
 /**
  * A textured (unified toolbar) button: graphite gradient, dark rim, 4 px
- * corners. segments: [{ id, glyph, onClick, tooltip, menu (shows a ▾), on }],
+ * corners. segments: [{ id, glyph, text, lead (an element before the text), onClick, onDown, tooltip, menu (shows a ▾), on, w }],
  * drawn as one segmented control. Height 23.
  */
 export function textured(segments, o = {}) {
@@ -534,6 +534,7 @@ export function textured(segments, o = {}) {
           .gap(3)
           .text_color(live ? "#333333" : "#8a8a8a")
           .active((st) => st.bg("#00000026"))
+          .when(Boolean(s.lead), (el) => el.child(s.lead))
           .when(Boolean(s.glyph), (el) => el.child(svg(s.glyph).w(s.size ?? 14).h(s.size ?? 14).text_color(live ? (s.on ? "#1d1d1d" : "#3a3a3a") : "#8f8f8f")))
           .when(Boolean(s.text), (el) => el.text_size(12).child(s.text))
           .when(Boolean(s.menu), (el) => el.child(svg(GLYPH.down).w(7).h(5).text_color(live ? "#333333" : "#8f8f8f"))),
@@ -767,7 +768,7 @@ export function openSheet(kind, p = {}) {
   });
 }
 
-/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen, zoomWindow, tearOff: tab, raise: tab, putBack: tab, mergeAll, launch: [app, folder?], reveal: path, unDock: app, win: name, pref: [name, value] }. */
+/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen, zoomWindow, tearOff: tab, raise: tab, putBack: tab, mergeAll, launch: [app, folder?], reveal: path, unDock: app, win: name, pref: [name, value], copy: text, linearPick: change }. */
 export function perform(act) {
   if (!act) return;
   if (act.run?.[0] === "tab.new") newTab(act.run[1] ?? {});
@@ -787,8 +788,9 @@ export function perform(act) {
   if (act.win) openWin(act.win);
   if (act.slackTab) openSlackTab();
   if (act.linearTab) openLinearTab();
-  // A Linear issue's field picked from its menu: the Linear window applies it (linear.js).
+  // A change picked from one of the Linear window's menus: the window applies it (linear.js).
   if (act.linearPick) setWin("linear", { pick: { ...act.linearPick, at: Date.now() } });
+  if (typeof act.copy === "string") exec("/bin/sh", ["-c", 'printf %s "$1" | pbcopy', "sh", act.copy]).catch(() => {});
   if (act.mergeAll) mergeAll();
   if (act.pref) setPref(act.pref[0], act.pref[1]);
   if (act.newSpaceIn)

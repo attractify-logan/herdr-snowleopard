@@ -1,7 +1,7 @@
 // Made-up Linear data for screenshots: a small company's teams, projects,
 // issues and inbox. linearapi.js answers from here, by each query's name,
 // while ~/.config/herdr-app/linear-demo exists. Changes (status, priority,
-// assignee, comments, read marks) stick until the mod reloads.
+// assignee, comments, read marks, archiving) stick until the mod reloads.
 
 // Kept across the mod's copies (each window loads this afresh), so changes stick everywhere.
 const G = (globalThis.__snowleopardLinearDemo ??= {});
@@ -43,6 +43,8 @@ function issue(team, num, title, o) {
   if (!fresh) return;
   const t = TEAMS.find((x) => x.key === team);
   const st = t.states.nodes.find((s) => s.id.endsWith(o.state));
+  const done = st.type === "completed" ? ago(o.upd ?? n) : null;
+  const gone = st.type === "canceled" ? ago(o.upd ?? n) : null;
   ISSUES.push({
     id: `i-${team}-${num}`,
     identifier: `${team}-${num}`,
@@ -50,7 +52,10 @@ function issue(team, num, title, o) {
     priority: o.pri ?? 0,
     updatedAt: ago(o.upd ?? (n += 37)),
     createdAt: ago((o.upd ?? n) + 2880),
+    completedAt: done,
+    canceledAt: gone,
     url: "https://linear.app",
+    branchName: `${o.who ?? "riley"}/${team.toLowerCase()}-${num}-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40)}`,
     state: { id: st.id, name: st.name, type: st.type, color: st.color },
     assignee: o.who ? U[o.who] : null,
     team: { id: t.id, key: t.key },
@@ -89,6 +94,12 @@ issue("MOB", 93, "Pull to refresh on the inbox", { state: "todo", pri: 4, who: "
 issue("MOB", 95, "Crash opening a photo from a notification", { state: "todo", pri: 2, who: "avery", upd: 110, labels: [BUG] });
 issue("MOB", 97, "Dark mode for the settings screens", { state: "backlog", pri: 0, who: null, upd: 1500, labels: [POLISH] });
 issue("MOB", 99, "Conflict screen when two people edit offline", { state: "backlog", pri: 3, who: "jordan", upd: 1200, proj: "offline", labels: [FEAT] });
+// Finished and dropped work, for the Closed and All views.
+issue("WEB", 190, "Plan toggle on the pricing page", { state: "done", pri: 2, who: "riley", upd: 2600, proj: "launch", labels: [FEAT], desc: "Monthly and yearly prices side by side, with a toggle." });
+issue("WEB", 185, "New footer with the legal links", { state: "done", pri: 3, who: "riley", upd: 4100, proj: "launch", labels: [POLISH] });
+issue("WEB", 201, "Pay by invoice at checkout", { state: "canceled", pri: 4, who: "riley", upd: 3300, proj: "checkout", labels: [FEAT], desc: "Dropped for now: too few accounts asked for it.", comments: [["sam", 3400, "Parking this until enterprise plans."]] });
+issue("MOB", 80, "Offline banner when the network drops", { state: "done", pri: 2, who: "riley", upd: 1900, proj: "offline", labels: [FEAT] });
+issue("MOB", 84, "Photos upload twice on a slow network", { state: "done", pri: 1, who: "jordan", upd: 2200, labels: [BUG] });
 
 const I = (id) => ISSUES.find((x) => x.id === id || x.identifier === id);
 
@@ -102,27 +113,34 @@ const NOTES = (G.notes ??= [
   { id: "n7", type: "issueNewComment", readAt: ago(1500), createdAt: ago(1700), title: I("i-WEB-211").title, subtitle: "Jordan commented: Charts bundle is split, first load is down to 2.6 s.", url: "https://linear.app", actor: U.jordan, issue: "i-WEB-211" },
 ]);
 
-const open = (i) => !["completed", "canceled", "duplicate"].includes(i.state.type);
-const ROWKEYS = ["id", "identifier", "title", "priority", "updatedAt", "url", "state", "assignee", "team"];
+const closed = (i) => ["completed", "canceled", "duplicate"].includes(i.state.type);
+const SHOWN = { "": (i) => !closed(i), Closed: closed, All: () => true };
+const ROWKEYS = ["id", "identifier", "title", "priority", "updatedAt", "completedAt", "canceledAt", "url", "branchName", "state", "assignee", "team"];
 const row = (i) => Object.fromEntries(ROWKEYS.map((k) => [k, i[k]]));
 const byUpdated = (a, b) => (a.updatedAt < b.updatedAt ? 1 : -1);
 const copy = (x) => JSON.parse(JSON.stringify(x));
-const unread = () => NOTES.filter((x) => !x.readAt).length;
+const kept = () => NOTES.filter((x) => !x.archivedAt);
+const unread = () => kept().filter((x) => !x.readAt).length;
+// The ids a many-at-once mutation names ($i0, $i1, …).
+const ids = (v) => Object.keys(v).filter((k) => /^i\d+$/.test(k)).map((k) => v[k]);
+const many = (v, f) => Object.fromEntries(ids(v).map((id, i) => [`n${i}`, { success: Boolean(f(NOTES.find((x) => x.id === id))) }]));
 
 export async function demoGql(query, v = {}) {
-  const op = /^\s*(?:query|mutation)\s+(\w+)/.exec(query)?.[1];
-  const list = (f) => ISSUES.filter((i) => open(i) && f(i)).sort(byUpdated).map(row);
+  const name = /^\s*(?:query|mutation)\s+(\w+)/.exec(query)?.[1] ?? "";
+  // Mine, Team and Project come as …Closed and …All too.
+  const [, op, show = ""] = /^(Mine|Team|Project)(Closed|All)?$/.exec(name) ?? [null, name];
+  const list = (f) => ({ nodes: ISSUES.filter((i) => SHOWN[show](i) && f(i)).sort(byUpdated).map(row), pageInfo: { hasNextPage: false } });
   switch (op) {
     case "Me":
       return copy({ viewer: { id: U.riley.id, name: U.riley.name, displayName: U.riley.displayName, organization: { name: "Pinecrest", urlKey: "pinecrest" } }, teams: { nodes: TEAMS }, users: { nodes: USERS }, projects: { nodes: PROJECTS } });
     case "Mine":
-      return copy({ notificationsUnreadCount: unread(), viewer: { assignedIssues: { nodes: list((i) => i.assignee?.id === U.riley.id) } } });
+      return copy({ notificationsUnreadCount: unread(), viewer: { assignedIssues: list((i) => i.assignee?.id === U.riley.id) } });
     case "Team":
-      return copy({ notificationsUnreadCount: unread(), issues: { nodes: list((i) => i.team.id === v.id) } });
+      return copy({ notificationsUnreadCount: unread(), issues: list((i) => i.team.id === v.id) });
     case "Project":
-      return copy({ notificationsUnreadCount: unread(), issues: { nodes: list((i) => i.project?.id === v.id) } });
+      return copy({ notificationsUnreadCount: unread(), issues: list((i) => i.project?.id === v.id) });
     case "Inbox":
-      return copy({ notificationsUnreadCount: unread(), notifications: { nodes: NOTES.map((x) => ({ ...x, issue: x.issue ? row(I(x.issue)) : undefined })) } });
+      return copy({ notificationsUnreadCount: unread(), notifications: { nodes: kept().map((x) => ({ ...x, issue: x.issue ? row(I(x.issue)) : undefined })) } });
     case "Unread":
       return { notificationsUnreadCount: unread() };
     case "Issue":
@@ -133,7 +151,11 @@ export async function demoGql(query, v = {}) {
       const inp = v.input ?? {};
       if ("stateId" in inp) {
         const st = TEAMS.find((t) => t.id === i.team.id).states.nodes.find((s) => s.id === inp.stateId);
-        if (st) i.state = { id: st.id, name: st.name, type: st.type, color: st.color };
+        if (st) {
+          i.state = { id: st.id, name: st.name, type: st.type, color: st.color };
+          i.completedAt = st.type === "completed" ? new Date().toISOString() : null;
+          i.canceledAt = st.type === "canceled" ? new Date().toISOString() : null;
+        }
       }
       if ("priority" in inp) i.priority = inp.priority;
       if ("assigneeId" in inp) i.assignee = USERS.find((u) => u.id === inp.assigneeId) ?? null;
@@ -149,8 +171,24 @@ export async function demoGql(query, v = {}) {
     }
     case "Read": {
       const x = NOTES.find((y) => y.id === v.id);
-      if (x) x.readAt = v.at;
+      if (x) x.readAt = v.at ?? null;
       return { notificationUpdate: { success: true } };
+    }
+    case "Archive":
+    case "Unarchive": {
+      const x = NOTES.find((y) => y.id === v.id);
+      if (x) x.archivedAt = op === "Archive" ? new Date().toISOString() : null;
+      return { [`notification${op}`]: { success: Boolean(x) } };
+    }
+    case "MarkMany":
+      return many(v, (x) => x && (x.readAt = v.at ?? null, true));
+    case "ArchiveMany":
+    case "UnarchiveMany":
+      return many(v, (x) => x && (x.archivedAt = op === "ArchiveMany" ? new Date().toISOString() : null, true));
+    case "Search": {
+      const t = String(v.t ?? "").toLowerCase();
+      const hits = ISSUES.filter((i) => `${i.identifier} ${i.title} ${i.description}`.toLowerCase().includes(t)).sort(byUpdated).map(row);
+      return copy({ searchIssues: { totalCount: hits.length, nodes: hits } });
     }
     default:
       throw new Error(`demo: no ${op}`);

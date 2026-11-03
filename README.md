@@ -61,14 +61,28 @@ and Dock icon runs a real Herdr command.
   back). Its icon, or Window › Linear, opens Linear as a tab, or from its
   right-click menu in its own Aqua window, laid out as Mail is:
   Inbox, My Issues, each team and each active project in a source list, the
-  open issues in a table above, and the selected one below with its
+  issues in a table above, and the selected one below with its
   description, comments and a field to reply. Its status, priority and
-  assignee pop up menus to change them; ↑ and ↓ walk the list, ⌘R checks now.
+  assignee pop up menus to change them.
+  - **Open, Closed or All.** The toolbar switch (or a source's right-click
+    menu) shows the open issues, the done and canceled ones (newest first,
+    grayed), or both; the Inbox switches between All and Unread.
+  - **Right-click menus.** A notification: Open in Linear, Mark as Read or
+    Unread, Archive, Copy its ID or link, Mark All as Read. An issue: Open in
+    Linear, Copy its ID, link or git branch name, Assign to Me, and its
+    status and priority. The Inbox in the source list: Mark All as Read and
+    Archive All Read.
+  - **Search and sort.** Typing in the search field (⌘F) narrows the list;
+    Return searches all of Linear, and Esc goes back. Click a column head to
+    sort by it, again to reverse.
+  - **Keys.** ↑ ↓ walk the list, ⇧⌘U marks read or unread, ⌫ archives a
+    notification, Return moves to the reply field, ⌘O opens in Linear, ⌘R
+    checks now, and ⌘Z takes back the last change.
   Opening a notification marks it read, and the Dock's Linear icon shows the
   unread count. It signs in with a personal API key (the setup panel opens
   Linear's settings) kept in your Keychain, and checks every 30 s while it's
-  on screen. Pictures show as links, and new issues, labels and cycles are
-  made in Linear itself (Open in Linear).
+  on screen; Sign Out is in the ⚙ menu. Pictures show as links, and new
+  issues, labels and cycles are made in Linear itself (Open in Linear).
 - **Dock applications.** View › Dock Applications… keeps any app in the Dock
   beside Herdr, with a light under the running ones. Right-click one to open
   the shown space's folder in it.

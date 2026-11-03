@@ -15,7 +15,7 @@ import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { props, closeOverlay, run, spaces, agents, panes, updates, home } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, vgrad, aquaButton, programIcon, plural, base, dockApps, addDockApp, removeDockApp, listApps, makeAppIcons, builtinApp, BUILTIN_APPS, appImage,
-  appIcon, appName, pref, setPref, tabLabel, openSheet, bead, statusMark,
+  appIcon, appName, pref, setPref, tabLabel, openSheet, bead, statusMark, perform,
 } from "./kit.js";
 
 export default class Sheet {
@@ -70,7 +70,7 @@ export default class Sheet {
 
   // What the alert says and does, by kind: { title, detail, yes, act } or null.
   alert(p) {
-    if (p.kind === "confirm") return { title: p.title, detail: p.detail, yes: p.yes ?? "OK", act: () => run(p.command.name, p.command.args ?? {}) };
+    if (p.kind === "confirm") return { title: p.title, detail: p.detail, yes: p.yes ?? "OK", act: () => (p.command ? run(p.command.name, p.command.args ?? {}) : perform(p.act)) };
     if (p.kind === "closetab") {
       const s = spaces().find((x) => x.tabs.some((t) => t.id === p.tab));
       const t = s?.tabs.find((x) => x.id === p.tab);
