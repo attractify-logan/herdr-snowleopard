@@ -87,7 +87,9 @@ and Dock icon runs a real Herdr command.
   does (Remove from Dock keeps it out). Its icon (or Window › Messages) opens your iMessage and text conversations in an Aqua window
   inside Herdr, or from its right-click menu as a tab. Conversations sit in a
   list, newest first, with each one's latest message and a blue dot and count
-  when it's unread. The open one shows as bubbles: blue for what you sent
+  when it's unread, and the contact's photo from Contacts as an iChat buddy
+  picture (else a blue Aqua tile with initials; graphite for a number or a
+  group). The open one shows as bubbles: blue for what you sent
   (green for SMS), gray for what you got, with names in groups. Type in the
   field and press Return to send through Messages.
   - **New messages.** The Dock's Messages icon shows a red badge, and each new
@@ -101,7 +103,9 @@ and Dock icon runs a real Herdr command.
     opens the conversation in Messages, ⌘R checks now.
   - **Setup.** Nothing is read until you click Read My Messages. Herdr reads
     Messages' own database on this Mac (`~/Library/Messages/chat.db`) and
-    names from Contacts, and nothing leaves the Mac. That needs Full Disk
+    names and photos from Contacts, and nothing leaves the Mac (the photos are
+    copied, 64 px, into the mod's hidden `.icons` folder, which Herdr needs to
+    show them). That needs Full Disk
     Access for Herdr, a switch in System Settings › Privacy & Security that
     the setup panel opens for you; quit and reopen Herdr after turning it on.
     The first send asks whether Herdr may control Messages. Stop Reading is in

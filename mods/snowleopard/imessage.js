@@ -10,7 +10,7 @@
 // anything read in Messages (that needs Apple's private API): Herdr keeps its
 // own marks, so its counts and Messages' can differ.
 
-import { div, svg } from "gpui-kit";
+import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { props, exec, closeOverlay, run, shared } from "herdr";
 import {
@@ -18,7 +18,7 @@ import {
   closeWin, zoomWin, startTornResize, dockApps, appName, appImage, openWin, appTab, aquaScrollbar, dragScroll, endScroll,
 } from "./kit.js";
 import {
-  KEEP, PRIVACY_URL, demoOn, loadConvs, loadThread, sendText, openInMessages, unread, markSeen, markAllSeen, imessageShown, connect, disconnect, nameFor, prettyHandle,
+  KEEP, PRIVACY_URL, demoOn, loadConvs, loadThread, sendText, openInMessages, unread, markSeen, markAllSeen, imessageShown, connect, disconnect, nameFor, prettyHandle, photoFor, clean,
 } from "./imessagedb.js";
 
 const TITLE = 22;
@@ -38,11 +38,8 @@ function stroke(e) {
   return [...["ctrl", "alt", "shift", "cmd"].filter((m) => parts.includes(m)), k].join("-");
 }
 
-const tile = (id) => {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-  return ["#3b7cef", "#2fa443", "#d9822b", "#9c4dcc", "#d23a64", "#1d9aa5", "#7a6f5a", "#5a6ad6"][Math.abs(h) % 8];
-};
+// A picture's stand-in, in Aqua's two finishes: blue gel for a named contact, graphite for a number or a group.
+const GEL = { blue: ["#8cbcf6", "#2a6fd6", "#1d4f9c"], graphite: ["#c9d0d9", "#7f8a99", "#5f6a78"] };
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -103,15 +100,30 @@ function countPill(n, on) {
     .child(div().absolute().top(0).left(0).size_full().flex().items_center().justify_center().text_size(10).font_weight(700).text_color(on ? "#3875d7" : "#ffffff").child(label));
 }
 
+/** A conversation's picture: the contact's photo from Contacts as an iChat buddy picture, else an Aqua gel tile. */
 function avatar(c, s) {
-  const ini = initials(c.name);
+  const r = Math.round(s * 0.22);
+  const photo = photoFor(c);
+  if (photo)
+    return div()
+      .relative()
+      .flex_none()
+      .w(s)
+      .h(s)
+      .child(image(photo).w(s).h(s).rounded(r))
+      .child(div().absolute().top(0).left(0).w(s).h(s).rounded(r).border_1().border_color("#00000038"));
+  const ini = c.group ? "" : initials(c.name);
+  const [top, bot, edge] = ini ? GEL.blue : GEL.graphite;
+  const g = Math.round(s * 0.6);
   return div()
     .relative()
     .flex_none()
     .w(s)
     .h(s)
-    .child(paint(rrect(s, s, s / 2), c.group ? "#8e97a6" : tile(c.name), s, s))
-    .child(paint(rrect(s - 4, s / 2 - 2, (s / 2 - 2) / 2, 2, 1), vgrad("#ffffff70", "#ffffff10"), s, s))
+    .child(paint(rrect(s, s, r), edge, s, s))
+    .child(paint(rrect(s - 2, s - 2, r - 1, 1, 1), vgrad(top, bot), s, s))
+    // The gloss: a bright band over the top half, as on an Aqua button.
+    .child(paint(rrect(s - 6, Math.round(s * 0.46), Math.max(2, r - 2), 3, 2), vgrad("#ffffffb8", "#ffffff18"), s, s))
     .child(
       div()
         .absolute()
@@ -121,11 +133,8 @@ function avatar(c, s) {
         .flex()
         .items_center()
         .justify_center()
-        .text_size(Math.round(s * 0.38))
-        .font_weight(700)
-        .text_color("#ffffff")
-        .when(Boolean(ini), (el) => el.child(ini))
-        .when(!ini, (el) => el.child(svg(GLYPH.person).w(Math.round(s * 0.55)).h(Math.round(s * 0.55)).text_color("#ffffff"))),
+        .when(Boolean(ini), (el) => el.child(embossed(ini, { size: Math.round(s * 0.4), bold: true, color: "#ffffff", shadow: "#00000060" })))
+        .when(!ini, (el) => el.child(svg(GLYPH.person).w(g).h(g).text_color("#ffffff"))),
     );
 }
 
@@ -637,6 +646,19 @@ export default class IMessage {
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
   }
 
+  /** A message, or a gray line where one can't be drawn (the window says why, not what it said). */
+  safeMessage(m, prev, c, maxW) {
+    try {
+      return this.message(m, prev, c, maxW);
+    } catch (e) {
+      if (!this.status) {
+        this.status = `A message couldn't be shown (${String(e?.message ?? e).slice(0, 80)}).`;
+        this.bad = true;
+      }
+      return v_flex().id(`im-${m.id}`).w_full().px(14).py(4).text_size(11).italic().text_color(C.gray).child("This message can't be shown here.");
+    }
+  }
+
   /** One message: a day line when time has passed, the sender in groups, the bubble, its files. */
   message(m, prev, c, maxW) {
     const gap = !prev || m.t - prev.t > 15 * 60000;
@@ -666,7 +688,7 @@ export default class IMessage {
             .text_size(12)
             .text_color(m.mine ? "#ffffff" : "#1f5bd6")
             .child("📎")
-            .child(div().underline().child(f.name))
+            .child(div().underline().child(clean(f.name)))
             .tooltip(f.path)
             .on_click(() => exec("open", [f.path]).catch(() => {})),
         ),
@@ -678,7 +700,7 @@ export default class IMessage {
       .pt(gap ? 4 : 2)
       .pb(2)
       .when(gap, (el) => el.child(div().w_full().flex().justify_center().pb(6).text_size(10).font_weight(700).text_color(C.gray).child(dayLine(m.t))))
-      .when(head, (el) => el.child(div().pl(12).pb(1).text_size(10).text_color(C.gray).child(nameFor(m.who))))
+      .when(head, (el) => el.child(div().pl(12).pb(1).text_size(10).text_color(C.gray).child(clean(nameFor(m.who)))))
       .child(h_flex().w_full().when(m.mine, (el) => el.justify_end()).child(bubble))
       .when(m.failed, (el) => el.child(h_flex().w_full().justify_end().pt(1).text_size(10).text_color("#c4281c").child("Not Delivered")));
   }
@@ -746,14 +768,14 @@ export default class IMessage {
                 .left(0)
                 .w(w)
                 .opacity(0)
-                .children(todo.map((i) => v_flex().id(`ims-${k(i)}`).w(w).on_size_change((size, cx) => this.measured(w, k(i), size.height, cx)).child(this.message(rows[i], rows[i - 1], c, maxW)))),
+                .children(todo.map((i) => v_flex().id(`ims-${k(i)}`).w(w).on_size_change((size, cx) => this.measured(w, k(i), size.height, cx)).child(this.safeMessage(rows[i], rows[i - 1], c, maxW)))),
             ),
           )
           .child(
             v_virtual_list(name, rows.length, sizes.length ? sizes : 0, (i) => String(rows[i].id), (range) => {
               this.vis = { lo: range.start, hi: range.end - 1 };
               const out = [];
-              for (let i = range.start; i < range.end; i++) out.push(this.message(rows[i], rows[i - 1], c, maxW));
+              for (let i = range.start; i < range.end; i++) out.push(this.safeMessage(rows[i], rows[i - 1], c, maxW));
               return out;
             })
               .track_scroll(this.scroll)

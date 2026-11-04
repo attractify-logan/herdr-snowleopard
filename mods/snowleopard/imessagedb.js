@@ -13,8 +13,8 @@
 // With ~/.config/herdr-app/imessage-demo present it answers from made-up
 // conversations instead (imessage-demo.js) and never touches the database.
 
-import { exec, home, shared, setShared, notify, watchFolder } from "herdr";
-import { winState, setWin, appTab, dockApps, appName, appIcon } from "./kit.js";
+import { exec, home, shared, setShared, notify, watchFolder, appHome } from "herdr";
+import { winState, setWin, appTab, dockApps, appName, appIcon, APP_ICONS } from "./kit.js";
 import { demoConvs, demoThread, demoSince, demoNames, demoSend } from "./imessage-demo.js";
 
 const SQLITE = "/usr/bin/sqlite3";
@@ -26,6 +26,7 @@ export const KEEP = (globalThis.__snowleopardIMessage ??= {
   convs: [], // newest first: { id, guid, ident, service, group, name, members, last: { id, t, text, mine }, unread: [ROWID] }
   names: new Map(), // phone (last 10 digits) or email → a contact's name
   namesAt: 0,
+  photos: new Map(), // the same keys → a contact's picture (a PNG in the mod's hidden icon folder)
   msgs: new Map(), // conversation id → messages, oldest first
   cur: null,
   last: 0, // the newest message's ROWID the watch has seen
@@ -70,8 +71,8 @@ FROM message m JOIN chat_message_join j ON j.message_id = m.ROWID LEFT JOIN hand
 WHERE m.ROWID > ${Number(n)} AND ${REAL("m")}
 ORDER BY m.ROWID LIMIT 50;`,
   // Contacts: each phone number and email with its person's name.
-  names: `SELECT r.ZFIRSTNAME AS f, r.ZLASTNAME AS l, r.ZORGANIZATION AS o, p.ZFULLNUMBER AS v FROM ZABCDPHONENUMBER p JOIN ZABCDRECORD r ON r.Z_PK = p.ZOWNER
-UNION ALL SELECT r.ZFIRSTNAME, r.ZLASTNAME, r.ZORGANIZATION, e.ZADDRESS FROM ZABCDEMAILADDRESS e JOIN ZABCDRECORD r ON r.Z_PK = e.ZOWNER;`,
+  names: `SELECT r.Z_PK AS pk, r.ZFIRSTNAME AS f, r.ZLASTNAME AS l, r.ZORGANIZATION AS o, p.ZFULLNUMBER AS v FROM ZABCDPHONENUMBER p JOIN ZABCDRECORD r ON r.Z_PK = p.ZOWNER
+UNION ALL SELECT r.Z_PK, r.ZFIRSTNAME, r.ZLASTNAME, r.ZORGANIZATION, e.ZADDRESS FROM ZABCDEMAILADDRESS e JOIN ZABCDRECORD r ON r.Z_PK = e.ZOWNER;`,
 };
 
 /** Is the demo switched on (a file in Herdr's folder)? Asked at most every 10 s. */
@@ -122,8 +123,16 @@ function utf8(hex, from, len) {
     else if (b >= 0xc0) (cp = b & 0x1f), (n = 1);
     else (cp = 0xfffd), (n = 0);
     i += 2;
-    for (let k = 0; k < n && i < end; k++, i += 2) cp = (cp << 6) | (parseInt(hex.substr(i, 2), 16) & 0x3f);
-    out += String.fromCodePoint(cp);
+    for (let k = 0; k < n; k++, i += 2) {
+      const c = i < end ? parseInt(hex.substr(i, 2), 16) : NaN;
+      // Not a continuation byte (or cut off): a bad character, and the byte starts the next one.
+      if (!(c >= 0x80 && c < 0xc0)) {
+        cp = 0xfffd;
+        break;
+      }
+      cp = (cp << 6) | (c & 0x3f);
+    }
+    out += String.fromCodePoint(cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff) ? 0xfffd : cp);
   }
   return out;
 }
@@ -166,8 +175,20 @@ export function decodeBody(hex) {
 
 /** A message row's words: its text, else the decoded body; attachment marks dropped. */
 export function words(row) {
-  const s = row.text ?? decodeBody(row.body);
-  return String(s ?? "").replace(/￼/g, "").trim();
+  let s = "";
+  try {
+    s = row.text ?? decodeBody(row.body);
+  } catch {}
+  return clean(String(s ?? "").replace(/￼/g, "")).trim();
+}
+
+/** Text that's safe to draw: no control characters (but tabs and line breaks), no half emoji, not endless. */
+export function clean(s) {
+  const t = String(s ?? "")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, "\ufffd");
+  return t.length > 6000 ? `${t.slice(0, 6000)}…` : t;
 }
 
 // ---- names
@@ -202,15 +223,16 @@ async function loadNames() {
   if (await demoOn()) rows = demoNames();
   else {
     // Each address book's rows as one JSON array, then a line of "--".
-    const sh = `for f in "$HOME/Library/Application Support/AddressBook/AddressBook-v22.abcddb" "$HOME/Library/Application Support/AddressBook/Sources/"*/AddressBook-v22.abcddb; do [ -f "$f" ] && ${SQLITE} -readonly -json "$f" "$1" 2>/dev/null; echo "--"; done`;
+    const sh = `for f in ${BOOKS}; do [ -f "$f" ] && ${SQLITE} -readonly -json "$f" "$1" 2>/dev/null; echo "--"; done`;
     const r = await exec("/bin/sh", ["-c", sh, "sh", SQL.names]).catch(() => null);
-    for (const part of (r?.stdout ?? "").split(/^--$/m)) {
+    // Each address book in turn (its number is its photos' prefix), present or not.
+    (r?.stdout ?? "").split(/^--$/m).forEach((part, book) => {
       const t = part.trim();
-      if (!t) continue;
+      if (!t) return;
       try {
-        rows = rows.concat(JSON.parse(t));
+        rows = rows.concat(JSON.parse(t).map((x) => ({ ...x, book })));
       } catch {}
-    }
+    });
   }
   const names = new Map();
   for (const r of rows) {
@@ -219,6 +241,51 @@ async function loadNames() {
     if (name && k && !names.has(k)) names.set(k, name);
   }
   KEEP.names = names;
+  if (!(await demoOn())) loadPhotos(rows).catch(() => {});
+}
+
+// Every address book: the main one, then each account's (iCloud, Google, Exchange).
+const BOOKS = '"$HOME/Library/Application Support/AddressBook/AddressBook-v22.abcddb" "$HOME/Library/Application Support/AddressBook/Sources/"*/AddressBook-v22.abcddb';
+const PHOTOS = `${APP_ICONS}/people`;
+
+// $1: the folder for the pictures. Each contact's thumbnail, kept in the address book itself
+// (01 + the image) or beside it (02 + a file name), becomes <book>-<record>.png, 64 px, once.
+// Herdr only shows images from the mod's own folder, so they're copied there (never committed: .icons is ignored).
+const PHOTOS_SH = `out="$1"; mkdir -p "$out"; i=0
+for db in ${BOOKS}; do
+  b=$i; i=$((i+1)); [ -f "$db" ] || continue
+  ext="$(dirname "$db")/.AddressBook-v22_SUPPORT/_EXTERNAL_DATA"
+  ${SQLITE} -readonly "$db" "SELECT Z_PK || char(9) || hex(substr(ZTHUMBNAILIMAGEDATA, 1, 1)) || char(9) || CASE WHEN hex(substr(ZTHUMBNAILIMAGEDATA, 1, 1)) = '02' THEN replace(CAST(substr(ZTHUMBNAILIMAGEDATA, 2) AS TEXT), char(0), '') ELSE '' END FROM ZABCDRECORD WHERE ZTHUMBNAILIMAGEDATA IS NOT NULL" 2>/dev/null |
+  while IFS="$(printf '\t')" read -r pk kind ref; do
+    png="$out/$b-$pk.png"; [ -s "$png" ] && continue
+    case "$kind" in
+      01) ${SQLITE} -readonly "$db" "SELECT writefile('$out/tmp.img', substr(ZTHUMBNAILIMAGEDATA, 2)) FROM ZABCDRECORD WHERE Z_PK = $pk" >/dev/null 2>&1 ;;
+      02) case "$ref" in */*|"") continue ;; esac; cp "$ext/$ref" "$out/tmp.img" 2>/dev/null || continue ;;
+      *) continue ;;
+    esac
+    sips -s format png -Z 64 "$out/tmp.img" --out "$png" >/dev/null 2>&1 || rm -f "$png"
+    rm -f "$out/tmp.img"
+  done
+done
+ls "$out"`;
+
+/** Contacts' pictures for the conversation list: made once, then found by phone number or email. */
+async function loadPhotos(rows) {
+  const r = await exec("/bin/sh", ["-c", PHOTOS_SH, "sh", `${appHome()}/${PHOTOS}`]);
+  const have = new Set(r.stdout.split("\n").filter((f) => f.endsWith(".png")));
+  const photos = new Map();
+  for (const x of rows) {
+    const f = `${x.book}-${x.pk}.png`;
+    const k = handleKey(x.v);
+    if (k && have.has(f) && !photos.has(k)) photos.set(k, `${PHOTOS}/${f}`);
+  }
+  KEEP.photos = photos;
+}
+
+/** A one-to-one conversation's contact picture (a mod-relative path), if Contacts has one. */
+export function photoFor(c) {
+  if (!c || c.group) return null;
+  return KEEP.photos.get(handleKey(c.ident || c.members[0])) ?? null;
 }
 
 // ---- conversations and messages
