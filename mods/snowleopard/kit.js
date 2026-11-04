@@ -1499,15 +1499,20 @@ export function builtinApp(path) {
   return String(path ?? "").startsWith("herdr:");
 }
 
-/** The built-in apps go in the Dock once, as Obsidian and Slack would if installed; removing one keeps it out. */
+// Mac apps that open inside Herdr and join the Dock once by themselves, as Linear does.
+const SEEDED_APPS = { Messages: "/System/Applications/Messages.app" };
+
+/** The built-in apps (and Messages) go in the Dock once, as Obsidian and Slack would if installed; removing one keeps it out. */
 export function seedBuiltinApps() {
   const seeded = shared("sl.builtinsSeeded") ?? [];
-  const todo = Object.keys(BUILTIN_APPS).filter((n) => !seeded.includes(n));
+  const todo = [...Object.keys(BUILTIN_APPS), ...Object.keys(SEEDED_APPS)].filter((n) => !seeded.includes(n));
   if (!todo.length) return;
   let apps = dockApps();
-  for (const n of todo) if (!apps.some((a) => appName(a.path) === n)) apps = [...apps, { path: BUILTIN_APPS[n].path, name: n, icon: true }];
+  for (const n of todo) if (BUILTIN_APPS[n] && !apps.some((a) => appName(a.path) === n)) apps = [...apps, { path: BUILTIN_APPS[n].path, name: n, icon: true }];
   setShared("sl.dockApps", apps);
   setShared("sl.builtinsSeeded", [...seeded, ...todo]);
+  // A Mac app's icon is made from its bundle first (addDockApp), then it shows.
+  for (const n of todo) if (SEEDED_APPS[n] && !apps.some((a) => appName(a.path) === n)) addDockApp(SEEDED_APPS[n]);
 }
 
 export function appName(path) {
@@ -1521,12 +1526,16 @@ export function appIcon(path) {
 
 // $1: the icon folder; the rest: .app bundles. Prints the icons it has.
 const ICON_SH = `out="$1"; shift; mkdir -p "$out"
+jxa='ObjC.import("AppKit"); function run(a) { const rep = $.NSBitmapImageRep.imageRepWithData($.NSWorkspace.sharedWorkspace.iconForFile(a[0]).TIFFRepresentation); if (!rep.representationUsingTypeProperties($.NSBitmapImageFileTypePNG, $()).writeToFileAtomically(a[1], true)) throw new Error("no icon"); }'
 for a in "$@"; do
   n=$(basename "$a" .app | sed 's/[^A-Za-z0-9_.-]/_/g')
   [ -f "$out/$n.png" ] && continue
-  f=$(plutil -extract CFBundleIconFile raw "$a/Contents/Info.plist" 2>/dev/null) || continue
-  case "$f" in *.icns) ;; *) f="$f.icns" ;; esac
-  [ -f "$a/Contents/Resources/$f" ] && sips -s format png -Z 128 "$a/Contents/Resources/$f" --out "$out/$n.png" >/dev/null 2>&1
+  if f=$(plutil -extract CFBundleIconFile raw "$a/Contents/Info.plist" 2>/dev/null); then
+    case "$f" in *.icns) ;; *) f="$f.icns" ;; esac
+    [ -f "$a/Contents/Resources/$f" ] && sips -s format png -Z 128 "$a/Contents/Resources/$f" --out "$out/$n.png" >/dev/null 2>&1
+  fi
+  # No .icns (an app that keeps its icon only in Assets.car): the icon Finder shows, from macOS.
+  [ -f "$out/$n.png" ] || { osascript -l JavaScript -e "$jxa" "$a" "$out/$n.png" >/dev/null 2>&1 && sips -Z 128 "$out/$n.png" >/dev/null 2>&1; } || rm -f "$out/$n.png"
 done
 ls "$out"`;
 
