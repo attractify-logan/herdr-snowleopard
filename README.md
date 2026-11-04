@@ -149,7 +149,10 @@ and Dock icon runs a real Herdr command.
   light gray panel with the agent's icon) comes up at the top right (click it to
   go there). Slack's and Messages' banners are the same notice, and several stack
   down the right edge. Herdr's own toasts (bottom right, such as "… finished")
-  are drawn by Herdr, not this mod. Click Herdr's own icon to
+  use the same panel where Herdr lets a layout choose its toast mod (the
+  layout's `"toast"`; proposed upstream in herdrdev/herdr-app#396, and in
+  [our build](https://github.com/attractify-logan/herdr-app/releases)); stock
+  Herdr ignores the setting and draws its own. Click Herdr's own icon to
   jump to the next agent that needs you; right-click it for the agents menu.
   Minimized windows wait by the Trash, and the Trash closes a tab or space
   after asking first.

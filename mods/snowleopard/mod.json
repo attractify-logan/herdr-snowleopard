@@ -1,1 +1,1 @@
-{ "place": "none" }
+{ "place": "none", "overlay": { "width": 336, "height": 72, "frame": "none", "props": { "role": "notice" } } }

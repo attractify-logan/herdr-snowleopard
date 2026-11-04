@@ -7,6 +7,7 @@
     -200
   ],
   "preview": "layouts/snowleopard.svg",
+  "toast": "snowleopard",
   "theme": "snowleopard-pro",
   "font": "Menlo",
   "font_size": 13,

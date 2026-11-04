@@ -103,7 +103,8 @@ const COMMANDS = {
 export default class SnowLeopard extends View {
   init(p, cx) {
     const pr = props() ?? p ?? {};
-    const R = ROLES[pr.role];
+    // A notification with no role: Herdr opened this mod as the layout's toast (layout "toast").
+    const R = ROLES[pr.role] ?? (typeof pr.title === "string" && pr.overlay ? Notice : null);
     this.role = R ? new R() : null;
     this.role?.init?.(pr, cx);
     if (pr.role === "menubar")

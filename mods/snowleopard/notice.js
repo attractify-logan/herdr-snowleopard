@@ -5,6 +5,11 @@
 // Several stack downward. The Dock opens one for an agent that needs you
 // (showNotice); Slack and Messages for a new message (showBanner). Props
 // { role, title, detail, program | icon, address | action, timeout, size }.
+// It also draws Herdr's own toasts (bottom right) where Herdr lets a layout
+// choose its toast mod (the layout's "toast"): props are then the
+// notification, { title, body, level, icon, action }. With mod.json's overlay
+// (frame "none", props role "notice") it's this same panel; without, inside
+// Herdr's own frame, just the panel's fill, rounded to that frame.
 // Also the helpers that name an agent the same way on every surface and pick
 // the one to go to next.
 
@@ -90,6 +95,7 @@ export function showBanner(n) {
 
 export default class Notice {
   init(_p, cx) {
+    this.size = null;
     cx.timer.after(props()?.timeout ?? SECONDS * 1000, () => this.close());
   }
 
@@ -99,6 +105,51 @@ export default class Notice {
 
   render(_cx) {
     const p = props() ?? {};
+    // A Herdr toast about an agent ("… finished") goes to its terminal: show that agent's icon.
+    const agent = p.address ? null : p.action?.name === "agent.focus" ? agents().find((a) => a.address === p.action.args?.terminal) : null;
+    const program = p.program ?? agent?.program ?? null;
+    const detail = p.detail ?? p.body;
+    const content = h_flex()
+      .absolute()
+      .top(0)
+      .left(0)
+      .size_full()
+      .items_center()
+      .gap(12)
+      .px(14)
+      // An agent's program, an app's icon, or (an app not in the Dock) none.
+      .when(Boolean(p.icon || p.address || agent), (el) => el.child(p.icon ? image(p.icon).flex_none().w(40).h(40) : programIcon(program, 40)))
+      .child(
+        v_flex()
+          .min_w(0)
+          .flex_shrink(1)
+          .gap(2)
+          .child(div().truncate().text_size(13).font_weight(700).text_color("#000000").child(p.title ?? ""))
+          .when(Boolean(detail), (el) => el.child(div().truncate().text_size(12).text_color("#3a3a3a").child(detail ?? ""))),
+      );
+    const click = () => {
+      if (p.action?.name) run(p.action.name, p.action.args ?? {});
+      else if (p.address) run("agent.focus", { terminal: p.address });
+      this.close();
+    };
+    // Inside Herdr's toast frame (its edge, corners and shadow): the fill, rounded as the frame is.
+    if (p.role !== "notice") {
+      const w = this.size?.width ?? 0;
+      const h = this.size?.height ?? 0;
+      return div()
+        .id("root")
+        .relative()
+        .size_full()
+        .font_family(FONT)
+        .cursor_pointer()
+        .on_size_change((size, cx) => {
+          this.size = size;
+          cx.notify();
+        })
+        .when(w > 0, (el) => el.child(paint(rrect(w, h, 7), vgrad("#f3f3f3", "#d2d2d2"), w, h)).child(paint(rrect(w - 14, 1, 0, 7, 0), "#ffffffd8", w, h)))
+        .child(content)
+        .on_click(click);
+    }
     return div()
       .id("root")
       .relative()
@@ -111,33 +162,9 @@ export default class Notice {
       .child(paint(rrect(PW, PH, 9, SH, TOP), "#00000070", W, H))
       .child(paint(rrect(PW - 2, PH - 2, 8, SH + 1, TOP + 1), vgrad("#f3f3f3", "#d2d2d2"), W, H))
       .child(paint(rrect(PW - 16, 1, 0, SH + 8, TOP + 1), "#ffffffd8", W, H))
-      .child(
-        h_flex()
-          .absolute()
-          .top(TOP)
-          .left(SH)
-          .w(PW)
-          .h(PH)
-          .items_center()
-          .gap(12)
-          .px(14)
-          // An agent's program, an app's icon, or (an app not in the Dock) none.
-          .when(Boolean(p.icon || p.address), (el) => el.child(p.icon ? image(p.icon).flex_none().w(40).h(40) : programIcon(p.program, 40)))
-          .child(
-            v_flex()
-              .min_w(0)
-              .flex_shrink(1)
-              .gap(2)
-              .child(div().truncate().text_size(13).font_weight(700).text_color("#000000").child(p.title ?? ""))
-              .when(Boolean(p.detail), (el) => el.child(div().truncate().text_size(12).text_color("#3a3a3a").child(p.detail ?? ""))),
-          ),
-      )
+      .child(div().absolute().top(TOP).left(SH).w(PW).h(PH).child(content))
       // A press here must not drag the window; the click goes where the notice says.
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_click(() => {
-        if (p.action?.name) run(p.action.name, p.action.args ?? {});
-        else if (p.address) run("agent.focus", { terminal: p.address });
-        this.close();
-      });
+      .on_click(click);
   }
 }
