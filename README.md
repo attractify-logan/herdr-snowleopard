@@ -91,7 +91,9 @@ and Dock icon runs a real Herdr command.
   picture (else a blue Aqua tile with initials; graphite for a number or a
   group). The open one shows as bubbles: blue for what you sent
   (green for SMS), gray for what you got, with names in groups. Type in the
-  field and press Return to send through Messages.
+  field and press Return to send through Messages. A person's iMessage and
+  SMS chats (and their phone number and email) are one conversation, as in
+  Messages, and sending goes by iMessage when they have it.
   - **New messages.** The Dock's Messages icon shows a red badge, and each new
     message brings a banner (click it to open the conversation), even with the
     window closed. New messages show up within a second or two.
