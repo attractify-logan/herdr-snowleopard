@@ -15,6 +15,7 @@
 //   notes     the Obsidian vault in an Aqua window (an overlay window)
 //   slack     Slack in an Aqua window (an overlay window)
 //   linear    Linear in an Aqua window (an overlay window) or a tab
+//   imessage  Messages in an Aqua window (an overlay window) or a tab
 //   notice    a Growl-style "needs you" notice at the top right (an overlay window)
 
 import { View, div } from "gpui-kit";
@@ -34,13 +35,16 @@ import AquaWindow from "./aqua.js";
 import Notes from "./notes.js";
 import Slack from "./slack.js";
 import Linear from "./linear.js";
+import IMessage from "./imessage.js";
 import Notice from "./notice.js";
 import { spaces } from "herdr";
-import { openSheet, tearOff, mergeAll, torn, openWin, openSlackTab, openLinearTab, setWin, winState, newTab, askCloseTab } from "./kit.js";
+import { openSheet, tearOff, mergeAll, torn, openWin, openSlackTab, openLinearTab, openImessageTab, imessageTab, setWin, winState, newTab, askCloseTab } from "./kit.js";
 import { lastNotified } from "./slackwatch.js";
+import { lastNotified as lastIMessage, demoOn as imessageDemo } from "./imessagedb.js";
+import { demoIncoming } from "./imessage-demo.js";
 import { refreshUsage } from "./usage.js";
 
-const ROLES = { menubar: MenuBar, titlebar: TitleBar, sidebar: Sidebar, tabs: Tabs, pane: PaneHeader, status: StatusBar, dock: Dock, menu: Menu, sheet: Sheet, desk: Desk, drag: Drag, aqua: AquaWindow, notes: Notes, slack: Slack, linear: Linear, notice: Notice };
+const ROLES = { menubar: MenuBar, titlebar: TitleBar, sidebar: Sidebar, tabs: Tabs, pane: PaneHeader, status: StatusBar, dock: Dock, menu: Menu, sheet: Sheet, desk: Desk, drag: Drag, aqua: AquaWindow, notes: Notes, slack: Slack, linear: Linear, imessage: IMessage, notice: Notice };
 
 // Key commands ("snowleopard.<command>" in keys.json), taken by the menu bar's copy.
 const COMMANDS = {
@@ -66,6 +70,18 @@ const COMMANDS = {
   slacktab: () => openSlackTab(),
   linear: () => (winState("linear").open || winState("linear").min ? openWin("linear") : openLinearTab()),
   linearwindow: () => openWin("linear"),
+  // Messages: its window (a tab already open is gone to), or a tab.
+  imessage: () => (!winState("imessage").open && !winState("imessage").min && imessageTab() ? openImessageTab() : openWin("imessage")),
+  imessagetab: () => openImessageTab(),
+  // A Messages banner's click: Messages, open to the conversation it was about.
+  imessageunread: () => {
+    const id = lastIMessage();
+    if (id) setWin("imessage", { goto: id });
+    if (!winState("imessage").open && !winState("imessage").min && imessageTab()) openImessageTab();
+    else openWin("imessage");
+  },
+  // The demo only: a made-up message arrives (imessage-demo.js), for the badge and banner.
+  imessagedemo: () => imessageDemo().then((on) => on && demoIncoming()),
   // A Slack banner's click: Slack, open to the conversation it was about.
   slackunread: () => {
     const id = lastNotified();

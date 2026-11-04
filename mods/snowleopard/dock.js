@@ -12,7 +12,7 @@
 // sit beside Herdr: click opens one, right-click opens the shown space's
 // folder in it (Obsidian as a vault), and a light shows the running ones.
 // Some apps open a window of their own inside Herdr (WIN_APPS): Obsidian's
-// icon opens the vault (notes.js), Slack's opens Slack (slack.js), Linear's Linear (linear.js); their menus
+// icon opens the vault (notes.js), Slack's opens Slack (slack.js), Linear's Linear (linear.js), Messages' Messages (imessage.js); their menus
 // still open the real app. A minimized one waits by the Trash.
 
 import { div, image, PathBuilder } from "gpui-kit";
@@ -20,12 +20,13 @@ import { h_flex } from "gpui-base";
 import { spaces, agents, run, shared, exec } from "herdr";
 import {
   C, FONT, ICON, paint, rrect, oval, vgrad, programIcon, leadProgram, countBadge, openMenu, closeMenus, menuSize,
-  spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, makeAppIcons, openWin, winState, WIN_APPS, openSlackTab, openLinearTab, slackTab, linearTab, builtinApp, seedBuiltinApps, fetchBuiltinIcons, appImage,
+  spaceItems, shortcut, embossed, torn, tabInfo, restoreTorn, dockApps, appIcon, appName, makeAppIcons, openWin, winState, WIN_APPS, openSlackTab, openLinearTab, slackTab, linearTab, imessageTab, openImessageTab, builtinApp, seedBuiltinApps, fetchBuiltinIcons, appImage,
   STATUS_WORD, tabLabel, pref, dockHeight,
 } from "./kit.js";
 import { withStatus, urgentAgent, agentName, agentSpace, showNotice } from "./notice.js";
 import { watchSlack, slackBadge } from "./slackwatch.js";
 import { watchLinear, linearBadge } from "./linearapi.js";
+import { watchIMessage, imessageBadge } from "./imessagedb.js";
 
 const ICON_SIZE = 48;
 const GAP = 8;
@@ -100,6 +101,8 @@ export default class Dock {
     watchSlack(cx);
     // Linear's unread inbox, for its badge here (linearapi.js).
     watchLinear(cx);
+    // New iMessages, for the badge here and a banner for each (imessagedb.js). Reads nothing until Messages is set up.
+    watchIMessage(cx);
   }
 
   poll(cx) {
@@ -205,6 +208,8 @@ export default class Dock {
         ? [{ label: "Open Slack in a Tab", act: { slackTab: true } }, { label: "Open Slack in a Window", act: { win } }, { label: "Open Slack App", act: { launch: [it.app.path] } }]
         : win === "linear"
         ? [{ label: "Open Linear in a Tab", act: { linearTab: true } }, { label: "Open Linear in a Window", act: { win } }, { label: "Open Linear App", act: { launch: [it.app.path] } }]
+        : win === "imessage"
+        ? [{ label: "Open Messages in a Window", act: { win } }, { label: "Open Messages in a Tab", act: { imessageTab: true } }, { label: "Open Messages App", act: { launch: [it.app.path] } }]
         : win
         ? [{ label: win === "notes" ? "Open Vault in Herdr" : `Open ${it.label} in Herdr`, act: { win } }, { label: `Open ${it.label} App`, act: { launch: [it.app.path] } }]
         : [{ label: "Open", act: { launch: [it.app.path] } }]),
@@ -220,7 +225,7 @@ export default class Dock {
   items() {
     const ags = agents();
     const list = [{ kind: "app", id: "herdr", label: "Herdr" }];
-    for (const a of dockApps()) list.push({ kind: "dapp", id: `app-${a.path}`, label: a.name, app: a, count: WIN_APPS[appName(a.path)] === "slack" ? slackBadge() : WIN_APPS[appName(a.path)] === "linear" ? linearBadge() : 0 });
+    for (const a of dockApps()) list.push({ kind: "dapp", id: `app-${a.path}`, label: a.name, app: a, count: { slack: slackBadge, linear: linearBadge, imessage: imessageBadge }[WIN_APPS[appName(a.path)]]?.() ?? 0 });
     for (const s of spaces()) {
       const mine = ags.filter((a) => a.space === s.id);
       // The folder wears the most urgent agent's badge: blocked, then done, working, the first.
@@ -242,12 +247,14 @@ export default class Dock {
       if (!info) continue;
       list.push({ kind: "win", id: `win-${id}`, tab: id, label: `${info.space.name} — ${tabLabel(info.space.id, info.tab)}`, program: leadProgram(info.space.id, id) });
     }
-    // Notes, Slack and Linear wait here whether or not their apps are in the Dock.
-    for (const win of ["notes", "slack", "linear"]) {
+    // Notes, Slack, Linear and Messages wait here whether or not their apps are in the Dock.
+    for (const win of ["notes", "slack", "linear", "imessage"]) {
       if (!winState(win).min) continue;
       const app = dockApps().find((a) => WIN_APPS[appName(a.path)] === win) ?? null;
       const last = winState(win).last;
-      list.push({ kind: "winmin", id: `winmin-${win}`, win, label: last ? last.split("/").pop().replace(/\.md$/i, "") : app?.name ?? { notes: "Notes", slack: "Slack", linear: "Linear" }[win], app });
+      // The notes window is named for its note; Messages' last is a conversation's id, not a name.
+      const named = last && win !== "imessage";
+      list.push({ kind: "winmin", id: `winmin-${win}`, win, label: named ? last.split("/").pop().replace(/\.md$/i, "") : app?.name ?? { notes: "Notes", slack: "Slack", linear: "Linear", imessage: "Messages" }[win], app });
     }
     list.push({ kind: "trash", id: "trash", label: "Trash" });
     return list;
@@ -381,6 +388,8 @@ export default class Dock {
       else if (win === "slack" && !winState("slack").open) openSlackTab();
       else if (win === "linear" && winState("linear").min) openWin("linear");
       else if (win === "linear" && !winState("linear").open) openLinearTab();
+      // Messages opens in a window; its menu offers a tab. A tab already open is gone to.
+      else if (win === "imessage" && !winState("imessage").open && !winState("imessage").min && imessageTab()) openImessageTab();
       else if (win) openWin(win);
       else exec("open", ["-a", it.app.path]).catch(() => {});
     }
@@ -431,7 +440,7 @@ export default class Dock {
       if (it.kind === "app") kids.push(this.light(x, false));
       // An app open inside Herdr is running too: its window, or Slack's or Linear's tab.
       const inside = WIN_APPS[appName(it.app?.path ?? "")] ?? "none";
-      const winOpen = Boolean(winState(inside).open) || (inside === "slack" && Boolean(slackTab())) || (inside === "linear" && Boolean(linearTab()));
+      const winOpen = Boolean(winState(inside).open) || (inside === "slack" && Boolean(slackTab())) || (inside === "linear" && Boolean(linearTab())) || (inside === "imessage" && Boolean(imessageTab()));
       if (it.kind === "dapp" && (this.running.has(it.app.path) || winOpen)) kids.push(this.light(x, false));
       if (it.kind === "space" && (it.running || it.space.active)) kids.push(this.light(x, it.space.active));
       kids.push(this.icon(it, x).top(top - ICON_SIZE + 9));
@@ -488,6 +497,12 @@ function miniWindow(s, program, badge = null, kind = "terminal") {
     for (let i = 0; i < 3; i++) el = el.child(div().absolute().top(y + 12 + i * 3).left(12).w(w - 15).h(2).bg(i === 1 ? "#5f95d9" : "#e3e8f2"));
     el = el.child(div().absolute().top(y + 22).left(12).w(w - 15).h(1).bg("#9a9a9a"));
   }
+  // Messages': a pale list at the left, a gray bubble and a blue one.
+  if (kind === "imessage") {
+    el = el.child(div().absolute().top(y + 10).left(1).w(11).h(bodyH).bg("#e3e7ee"));
+    el = el.child(div().absolute().top(y + 14).left(15).w(14).h(5).rounded(2).bg("#d4d6da"));
+    el = el.child(div().absolute().top(y + 22).right(4).w(16).h(5).rounded(2).bg("#2f7bf5"));
+  }
   if (kind === "slack") {
     el = el.child(div().absolute().top(y + 10).left(1).w(11).h(bodyH).bg("#4a3a5c"));
     for (let i = 0; i < 3; i++) el = el.child(div().absolute().top(y + 14 + i * 5).left(16).w(i === 1 ? 14 : 22).h(1).bg("#b4b4b4"));
@@ -499,6 +514,9 @@ function miniWindow(s, program, badge = null, kind = "terminal") {
     .when(!badge && kind === "notes", (e) => e.child(image(ICON.note).absolute().bottom(2).right(0).w(s * 0.38).h(s * 0.38)))
     .when(!badge && kind === "linear", (e) =>
       e.child(div().absolute().bottom(2).right(0).w(s * 0.38).h(s * 0.38).rounded(4).bg("#5e6ad2").flex().items_center().justify_center().font_family("Helvetica").font_weight(700).text_size(s * 0.24).text_color("#ffffff").child("L")),
+    )
+    .when(!badge && kind === "imessage", (e) =>
+      e.child(div().absolute().bottom(2).right(0).w(s * 0.38).h(s * 0.38).rounded_full().bg("#2f7bf5").flex().items_center().justify_center().font_family("Helvetica").font_weight(700).text_size(s * 0.2).text_color("#ffffff").child("…")),
     )
     .when(!badge && kind === "slack", (e) =>
       e.child(div().absolute().bottom(2).right(0).w(s * 0.38).h(s * 0.38).rounded(4).bg("#4a154b").flex().items_center().justify_center().font_family("Helvetica").font_weight(700).text_size(s * 0.26).text_color("#ffffff").child("#")),

@@ -776,7 +776,7 @@ export function openSheet(kind, p = {}) {
   });
 }
 
-/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen, zoomWindow, tearOff: tab, raise: tab, putBack: tab, mergeAll, launch: [app, folder?], reveal: path, unDock: app, win: name, pref: [name, value], copy: text, linearPick: change }. */
+/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen, zoomWindow, tearOff: tab, raise: tab, putBack: tab, mergeAll, launch: [app, folder?], reveal: path, unDock: app, win: name, pref: [name, value], copy: text, linearPick: change, imessageTab, imessagePick: change }. */
 export function perform(act) {
   if (!act) return;
   if (act.run?.[0] === "tab.new") newTab(act.run[1] ?? {});
@@ -798,6 +798,8 @@ export function perform(act) {
   if (act.linearTab) openLinearTab();
   // A change picked from one of the Linear window's menus: the window applies it (linear.js).
   if (act.linearPick) setWin("linear", { pick: { ...act.linearPick, at: Date.now() } });
+  if (act.imessageTab) openImessageTab();
+  if (act.imessagePick) setWin("imessage", { pick: { ...act.imessagePick, at: Date.now() } });
   if (typeof act.copy === "string") exec("/bin/sh", ["-c", 'printf %s "$1" | pbcopy', "sh", act.copy]).catch(() => {});
   if (act.mergeAll) mergeAll();
   if (act.pref) setPref(act.pref[0], act.pref[1]);
@@ -1316,17 +1318,17 @@ export function startTear(tabId, e, name = "") {
 // ---- app windows
 //
 // Aqua windows for an app's content inside Herdr, opened from its Dock icon:
-// "notes" (the Obsidian vault, notes.js), "slack" (slack.js) and "linear"
-// (linear.js). Each is an
+// "notes" (the Obsidian vault, notes.js), "slack" (slack.js), "linear"
+// (linear.js) and "imessage" (Messages, imessage.js). Each is an
 // overlay window like a torn-off tab's, its role named after it, with shared
 // "sl.<name>" = { open, min, big, at, w, h, ... }: whether it's showing,
 // minimized to the Dock or zoomed, where it sits and how big, plus the
 // window's own memory (the notes window's last note).
 
-const APP_WIN = { notes: { w: 860, h: 560 }, slack: { w: 900, h: 600 }, linear: { w: 980, h: 640 } };
+const APP_WIN = { notes: { w: 860, h: 560 }, slack: { w: 900, h: 600 }, linear: { w: 980, h: 640 }, imessage: { w: 860, h: 580 } };
 
 /** The Dock app whose icon opens each window. */
-export const WIN_APPS = { Obsidian: "notes", Slack: "slack", Linear: "linear" };
+export const WIN_APPS = { Obsidian: "notes", Slack: "slack", Linear: "linear", Messages: "imessage" };
 
 export function winState(name) {
   return shared(`sl.${name}`) ?? {};
@@ -1429,6 +1431,14 @@ export const slackTab = () => appTab("Slack");
 export const openSlackTab = () => openAppTab("Slack", "slack");
 export const linearTab = () => appTab("Linear");
 export const openLinearTab = () => openAppTab("Linear", "linear");
+export const imessageTab = () => appTab("Messages");
+/** Messages as a tab: its window, if open, closes (one copy only). */
+export function openImessageTab() {
+  const n = winState("imessage");
+  if (n.open && n.overlay) closeWin("imessage", n.overlay);
+  else if (n.min) setWin("imessage", { min: false });
+  openAppTab("Messages", "imessage");
+}
 
 /** A new frame from the grip: reopened in place at the new size. */
 export function resizeWin(name, f) {
