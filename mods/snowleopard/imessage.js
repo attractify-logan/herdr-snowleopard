@@ -227,7 +227,8 @@ export default class IMessage {
       this.follow = true;
     }
     cx.notify();
-    this.fetch(id, cx, true);
+    // Its own task: the click's cx ends with the click, and the read takes longer.
+    cx.spawn((cx) => this.fetch(id, cx, true));
   }
 
   conv() {
@@ -1032,7 +1033,7 @@ export default class IMessage {
       this.tick = tick;
       const c = this.conv();
       const rows = KEEP.msgs.get(KEEP.cur);
-      if (c && rows && (rows[rows.length - 1]?.id ?? 0) < c.last.id) cx.timer.after(0, (cx) => this.fetch(c.id, cx));
+      if (c && rows && (rows[rows.length - 1]?.id ?? 0) < c.last.id) cx.timer.after(0, (cx) => cx.spawn((cx) => this.fetch(c.id, cx)));
     }
     // On screen, so read here (Herdr's marks only).
     const c = this.conv();
