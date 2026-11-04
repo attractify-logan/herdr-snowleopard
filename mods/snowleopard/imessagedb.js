@@ -54,6 +54,10 @@ export const SQL = {
   (SELECT group_concat(h.id, char(9)) FROM chat_handle_join x JOIN handle h ON h.ROWID = x.handle_id WHERE x.chat_id = c.ROWID) AS members,
   m.ROWID AS last, ${T("m.date")} AS t, ${TEXT("m")}, m.is_from_me AS mine, m.cache_has_attachments AS att,
   IFNULL((SELECT max(z.message_id) FROM chat_message_join z JOIN message v ON v.ROWID = z.message_id WHERE z.chat_id = c.ROWID AND v.is_from_me = 1), 0) AS replied,
+  (SELECT k.ROWID || char(9) || IFNULL(k.service, '') FROM chat_message_join y JOIN message k ON k.ROWID = y.message_id
+    WHERE y.chat_id = c.ROWID AND k.is_from_me = 0 AND ${REAL("k")} ORDER BY k.ROWID DESC LIMIT 1) AS their,
+  (SELECT ${T("max(k.date)")} FROM chat_message_join y JOIN message k ON k.ROWID = y.message_id
+    WHERE y.chat_id = c.ROWID AND k.is_from_me = 0 AND k.service = 'iMessage') AS im,
   (SELECT group_concat(u.ROWID) FROM chat_message_join y JOIN message u ON u.ROWID = y.message_id
     WHERE y.chat_id = c.ROWID AND u.is_read = 0 AND u.is_from_me = 0 AND ${REAL("u")}${lr ? " AND u.date > IFNULL(c.last_read_message_timestamp, 0)" : ""}
     AND u.ROWID > IFNULL((SELECT max(z.message_id) FROM chat_message_join z JOIN message v ON v.ROWID = z.message_id WHERE z.chat_id = c.ROWID AND v.is_from_me = 1), 0)) AS unread
@@ -329,6 +333,9 @@ export async function loadConvs(force = false) {
       members,
       last: { id: Number(r.last), t: Number(r.t), text: words(r) || (r.att ? "Attachment" : ""), mine: Boolean(r.mine) },
       replied: Number(r.replied ?? 0),
+      // Their newest message ([ROWID, service]) and when they last sent an iMessage, for how to send.
+      their: r.their ? [Number(String(r.their).split("\t")[0]), String(r.their).split("\t")[1] ?? ""] : [0, ""],
+      im: Number(r.im ?? 0),
       unread: String(r.unread ?? "").split(",").filter(Boolean).map(Number),
     };
   });
@@ -365,7 +372,17 @@ function merge(list) {
     into.ids.push(c.id);
     into.unread = into.unread.concat(c.unread);
     into.replied = Math.max(into.replied, c.replied);
+    if (c.their[0] > into.their[0]) into.their = c.their;
+    into.im = Math.max(into.im, c.im);
     if (into.service !== "iMessage" && c.service === "iMessage") Object.assign(into, { service: c.service, ident: c.ident, guid: c.guid });
+  }
+  // How to send, as near as Messages' own choice (it asks Apple whether they have iMessage, which
+  // Herdr can't): iMessage when they've sent one in the last 60 days or their newest came by
+  // iMessage, a text when they've only been texting, else the chat's own service.
+  for (const c of out) {
+    if (c.group) continue;
+    if (c.im > Date.now() - 60 * 86400000 || c.their[1] === "iMessage") c.service = "iMessage";
+    else if (c.their[1] === "SMS" || c.their[1] === "RCS") c.service = "SMS";
   }
   for (const c of out) {
     if (c.ids.length < 2) continue;

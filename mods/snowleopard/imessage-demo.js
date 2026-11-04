@@ -95,7 +95,10 @@ export function demoConvs() {
     const last = mine[mine.length - 1];
     const replied = mine.filter((x) => x.mine).reduce((a, x) => Math.max(a, x.id), 0);
     const unread = mine.filter((x) => !x.mine && !x.read && x.id > replied).map((x) => x.id).join(",");
-    out.push({ id: c.id, guid: c.guid, ident: c.ident, service: c.service, title: c.title, style: c.style, members: membersOf(c), last: last.id, t: last.t, ...textOf(last), mine: last.mine ? 1 : 0, att: last.files.length ? 1 : 0, replied, unread });
+    const theirs = mine.filter((x) => !x.mine);
+    const their = theirs.length ? `${theirs[theirs.length - 1].id}\t${c.service}` : null;
+    const im = c.service === "iMessage" && theirs.length ? theirs[theirs.length - 1].t : null;
+    out.push({ id: c.id, guid: c.guid, ident: c.ident, service: c.service, title: c.title, style: c.style, members: membersOf(c), last: last.id, t: last.t, ...textOf(last), mine: last.mine ? 1 : 0, att: last.files.length ? 1 : 0, replied, their, im, unread });
   }
   return out.sort((a, b) => b.last - a.last);
 }
