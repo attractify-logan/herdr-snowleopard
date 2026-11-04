@@ -49,8 +49,10 @@ export const SQL = {
   // can count only what came after them): not mine, not read in Messages (the message's flag,
   // and the chat's "read up to" time, which Messages keeps more faithfully when you read on
   // your phone), and after my last reply there (a reply means it was read, wherever); replied
-  // is that reply, so chats merged into one conversation can share it.
-  convs: (lr = true) => `SELECT c.ROWID AS id, c.guid, c.chat_identifier AS ident, c.service_name AS service, c.display_name AS title, c.style,
+  // is that reply, so chats merged into one conversation can share it. filtered: Messages put the
+  // chat under Unknown Senders (or Junk), which its badge leaves out. Older databases have
+  // neither column (new = false).
+  convs: (lr = true) => `SELECT c.ROWID AS id, c.guid, c.chat_identifier AS ident, c.service_name AS service, c.display_name AS title, c.style,${lr ? " IFNULL(c.is_filtered, 0) AS filtered," : ""}
   (SELECT group_concat(h.id, char(9)) FROM chat_handle_join x JOIN handle h ON h.ROWID = x.handle_id WHERE x.chat_id = c.ROWID) AS members,
   m.ROWID AS last, ${T("m.date")} AS t, ${TEXT("m")}, m.is_from_me AS mine, m.cache_has_attachments AS att,
   IFNULL((SELECT max(z.message_id) FROM chat_message_join z JOIN message v ON v.ROWID = z.message_id WHERE z.chat_id = c.ROWID AND v.is_from_me = 1), 0) AS replied,
@@ -333,6 +335,7 @@ export async function loadConvs(force = false) {
       members,
       last: { id: Number(r.last), t: Number(r.t), text: words(r) || (r.att ? "Attachment" : ""), mine: Boolean(r.mine) },
       replied: Number(r.replied ?? 0),
+      filtered: Number(r.filtered ?? 0) !== 0,
       // Their newest message ([ROWID, service]) and when they last sent an iMessage, for how to send.
       their: r.their ? [Number(String(r.their).split("\t")[0]), String(r.their).split("\t")[1] ?? ""] : [0, ""],
       im: Number(r.im ?? 0),
@@ -374,6 +377,7 @@ function merge(list) {
     into.replied = Math.max(into.replied, c.replied);
     if (c.their[0] > into.their[0]) into.their = c.their;
     into.im = Math.max(into.im, c.im);
+    into.filtered = into.filtered && c.filtered;
     if (into.service !== "iMessage" && c.service === "iMessage") Object.assign(into, { service: c.service, ident: c.ident, guid: c.guid });
   }
   // How to send, as near as Messages' own choice (it asks Apple whether they have iMessage, which
@@ -385,6 +389,8 @@ function merge(list) {
     else if (c.their[1] === "SMS" || c.their[1] === "RCS") c.service = "SMS";
   }
   for (const c of out) {
+    // Unknown senders and junk: listed, but not counted, as Messages' own badge doesn't.
+    if (c.filtered) c.unread = [];
     if (c.ids.length < 2) continue;
     c.id = c.ids.reduce((a, x) => (Number(x) < Number(a) ? x : a));
     // A reply in any of its chats means what came before it was read.
@@ -419,6 +425,45 @@ export async function loadThread(id) {
   }
   KEEP.msgs.set(String(id), out);
   return out;
+}
+
+// ---- diagnostics
+
+/**
+ * What Herdr sees, for finding a problem from afar: chat ids, services, message ids and flags
+ * only, never a name, address or a word of a message. The ⚙ menu copies it.
+ */
+export async function diagnostics() {
+  const out = ["Herdr Messages diagnostics (ids and services only: no names, numbers or text)"];
+  const c = KEEP.convs.find((x) => x.id === KEEP.cur);
+  const chatsOf = (cv) => cv.ids.join("+");
+  out.push(`database: ${KEEP.noReadTime ? "older (no read time or filter columns)" : "read time and filter columns"}; ${KEEP.convs.length} conversations from ${KEEP.convs.reduce((n, x) => n + x.ids.length, 0)} chats; contacts ${KEEP.names.size}, photos ${KEEP.photos.size}`);
+  try {
+    const handles = await sql("SELECT ROWID AS id, id AS h FROM handle;");
+    if (c && !c.group) {
+      // Every chat with this person (by contact card, else address), merged or not.
+      const key = (h) => KEEP.who?.get(handleKey(h)) ?? handleKey(h);
+      const mine = key(c.ident || c.members[0]);
+      const hs = handles.filter((h) => key(h.h) === mine).map((h) => Number(h.id));
+      const chats = hs.length
+        ? await sql(`SELECT DISTINCT c.ROWID AS id, c.service_name AS svc, c.style${KEEP.noReadTime ? "" : ", IFNULL(c.is_filtered, 0) AS f"}, (SELECT max(message_id) FROM chat_message_join WHERE chat_id = c.ROWID) AS newest FROM chat c JOIN chat_handle_join x ON x.chat_id = c.ROWID WHERE x.handle_id IN (${hs.join(",")});`)
+        : [];
+      const rows = KEEP.msgs.get(c.id) ?? [];
+      out.push(`open conversation ${c.id}: chats ${chatsOf(c)}; sends by ${c.service}; their newest #${c.their?.[0] ?? 0} (${c.their?.[1] || "-"}); last iMessage from them ${c.im ? `${Math.round((Date.now() - c.im) / 3600000)} h ago` : "never"}; conversation newest #${c.last.id}; thread ${rows.length} messages, newest #${rows[rows.length - 1]?.id ?? 0}`);
+      out.push(`  this person's addresses: ${hs.length}; their chats: ${chats.map((x) => `${x.id} ${x.svc} style ${x.style}${x.f ? ` filtered ${x.f}` : ""} newest #${x.newest ?? 0}${c.ids.includes(String(x.id)) ? "" : ` NOT MERGED (${KEEP.chatTo?.has(String(x.id)) ? `shown as ${convOf(x.id)}` : "not listed"})`}`).join("; ") || "none"}`);
+    } else out.push(`open conversation: ${c ? `${c.id} (group, chats ${chatsOf(c)})` : "none"}`);
+    const newest = await sql(`SELECT m.ROWID AS id, j.chat_id AS chat, m.service AS svc, m.is_from_me AS mine, m.item_type AS it, m.associated_message_type AS at FROM message m LEFT JOIN chat_message_join j ON j.message_id = m.ROWID ORDER BY m.ROWID DESC LIMIT 8;`);
+    out.push("newest messages in the database:");
+    for (const m of newest) out.push(`  #${m.id} chat ${m.chat ?? "none"} ${m.svc || "-"} ${m.mine ? "from me" : "from them"}${m.it || m.at ? ` (item ${m.it}, reaction ${m.at})` : ""}: ${m.chat == null ? "in no chat" : KEEP.chatTo?.has(String(m.chat)) ? `shown in conversation ${convOf(m.chat)}` : "chat not listed"}`);
+  } catch (e) {
+    out.push(`couldn't read: ${e?.message ?? e}`);
+  }
+  const u = unread();
+  out.push(`unread here: ${Object.keys(u).length ? Object.entries(u).map(([id, n]) => {
+    const cv = KEEP.convs.find((x) => x.id === id);
+    return `${id} (${cv ? `${cv.group ? "group" : KEEP.names.has(handleKey(cv.ident || cv.members[0])) ? "contact" : "not a contact"}, chats ${chatsOf(cv)}, ${cv.service}` : "gone"}): ${n}`;
+  }).join("; ") : "none"}`);
+  return out.join("\n");
 }
 
 // ---- sending

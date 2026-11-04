@@ -18,7 +18,7 @@ import {
   closeWin, zoomWin, startTornResize, dockApps, appName, appImage, openWin, appTab, aquaScrollbar, dragScroll, endScroll,
 } from "./kit.js";
 import {
-  KEEP, PRIVACY_URL, demoOn, loadConvs, loadThread, sendText, openInMessages, unread, markSeen, markAllSeen, imessageShown, connect, disconnect, nameFor, prettyHandle, photoFor, clean,
+  KEEP, PRIVACY_URL, demoOn, loadConvs, loadThread, sendText, openInMessages, unread, markSeen, markAllSeen, imessageShown, connect, disconnect, nameFor, prettyHandle, photoFor, clean, diagnostics,
 } from "./imessagedb.js";
 
 const TITLE = 22;
@@ -327,6 +327,12 @@ export default class IMessage {
       disconnect();
       this.say("", cx);
     } else if (p.do === "refresh") this.refresh(cx);
+    else if (p.do === "diag")
+      cx.spawn(async (cx) => {
+        const text = await diagnostics();
+        await exec("/bin/sh", ["-c", 'printf %s "$1" | pbcopy', "sh", text]).catch(() => {});
+        this.say("Diagnostics copied (ids and services only, no names, numbers or text).", cx);
+      });
     cx.notify();
   }
 
@@ -417,6 +423,7 @@ export default class IMessage {
     const items = [
       { label: "Mark All as Read", disabled: !Object.keys(unread()).length, act: pick({ do: "readAll" }) },
       { label: "Check for New Messages", shortcut: "⌘R", act: pick({ do: "refresh" }) },
+      { label: "Copy Diagnostics", disabled: !this.on(), act: pick({ do: "diag" }) },
       { sep: true },
       { label: "Open Messages App", act: { launch: [MESSAGES_APP] } },
       { label: "Open Privacy Settings…", act: { open: PRIVACY_URL } },
