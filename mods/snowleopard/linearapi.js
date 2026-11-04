@@ -53,9 +53,9 @@ const SHOW = {
 export function listQuery(kind, show = "open") {
   const s = SHOW[show] ?? SHOW.open;
   const list = (f) => `(first: ${s.first}, orderBy: updatedAt${f || s.filter ? `, filter: { ${[f, s.filter].filter(Boolean).join(", ")} }` : ""}) { nodes { ...Row } pageInfo { hasNextPage } }`;
-  if (kind === "team") return `query Team${s.name}($id: ID!) { notificationsUnreadCount issues${list("team: { id: { eq: $id } }")} } ${ROW}`;
-  if (kind === "project") return `query Project${s.name}($id: ID!) { notificationsUnreadCount issues${list("project: { id: { eq: $id } }")} } ${ROW}`;
-  return `query Mine${s.name} { notificationsUnreadCount viewer { assignedIssues${list("")} } } ${ROW}`;
+  if (kind === "team") return `query Team${s.name}($id: ID!) { issues${list("team: { id: { eq: $id } }")} } ${ROW}`;
+  if (kind === "project") return `query Project${s.name}($id: ID!) { issues${list("project: { id: { eq: $id } }")} } ${ROW}`;
+  return `query Mine${s.name} { viewer { assignedIssues${list("")} } } ${ROW}`;
 }
 
 /** One request that changes many notifications at once: each one an aliased mutation. */
@@ -67,7 +67,7 @@ export function manyQuery(op, field, ids, withAt) {
 
 export const Q = {
   me: `query Me { viewer { id name displayName organization { name urlKey } } teams(first: 50) { nodes { id key name states { nodes { id name type color position } } } } users(first: 250, filter: { active: { eq: true } }) { nodes { id name displayName } } projects(first: 50, orderBy: updatedAt, filter: { status: { type: { in: ["backlog", "planned", "started"] } } }) { nodes { id name progress targetDate url status { name type } lead { name displayName } } } }`,
-  inbox: `query Inbox { notificationsUnreadCount notifications(first: 100) { nodes { id type readAt createdAt title subtitle url actor { name displayName } ... on IssueNotification { issue { ...Row } } } } } ${ROW}`,
+  inbox: `query Inbox { notifications(first: 100) { nodes { id type readAt snoozedUntilAt createdAt title subtitle url actor { name displayName } ... on IssueNotification { issue { ...Row } } } } } ${ROW}`,
   search: `query Search($t: String!) { searchIssues(term: $t, first: 50, includeArchived: false, orderBy: updatedAt) { totalCount nodes { ...SRow } } } ${SROW}`,
   issue: `query Issue($id: String!) { issue(id: $id) { ...Row description createdAt creator { name displayName } project { id name } labels { nodes { name color } } comments(first: 100) { nodes { id body createdAt user { name displayName } botActor { name } parent { id } } } } } ${ROW}`,
   update: `mutation Update($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success issue { ...Row } } } ${ROW}`,
@@ -76,7 +76,9 @@ export const Q = {
   read: `mutation Read($id: String!, $at: DateTime) { notificationUpdate(id: $id, input: { readAt: $at }) { success } }`,
   archive: `mutation Archive($id: String!) { notificationArchive(id: $id) { success } }`,
   unarchive: `mutation Unarchive($id: String!) { notificationUnarchive(id: $id) { success } }`,
-  unread: `query Unread { notificationsUnreadCount }`,
+  // Linear's own notificationsUnreadCount also counts archived notifications never read, which the
+  // Inbox doesn't show (and Mark All as Read can't reach): count what the Inbox shows instead.
+  unread: `query Unread { notifications(first: 100) { nodes { readAt snoozedUntilAt } } }`,
 };
 
 /** One GraphQL request. Errors come back as short codes plain() can word. */
@@ -162,6 +164,12 @@ export function forget() {
   setShared("sl.linearUnread", 0);
 }
 
+/** Unread in the Inbox as Linear shows it: not read, not snoozed (archived ones aren't listed). */
+export function inboxUnread(nodes) {
+  const now = Date.now();
+  return (nodes ?? []).filter((n) => !n.readAt && !(n.snoozedUntilAt && Date.parse(n.snoozedUntilAt) > now)).length;
+}
+
 /** The inbox's unread count, for the Dock badge. */
 export function linearBadge() {
   return shared("sl.linearUnread") ?? 0;
@@ -207,7 +215,7 @@ function tick(cx, who) {
         await signIn(key);
       }
       const d = await gql(KEEP.token, Q.unread);
-      setUnread(d.notificationsUnreadCount ?? 0);
+      setUnread(inboxUnread(d.notifications?.nodes));
     } catch {
     } finally {
       if (W.busy === mine) W.busy = 0;

@@ -19,7 +19,7 @@ import {
   C, FONT, GLYPH, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, aquaButton, closeMenus, openMenu, menuSize, appSize, winState, setWin, noteWinSpot,
   closeWin, zoomWin, startTornResize, dockApps, appName, openWin, appTab, aquaScrollbar, dragScroll, endScroll, builtinApp, appImage,
 } from "./kit.js";
-import { KEEP, KEYCHAIN, DEMO, Q, gql, listQuery, manyQuery, plain, savedKey, signIn, forget, setUnread, linearShown } from "./linearapi.js";
+import { KEEP, KEYCHAIN, DEMO, Q, gql, listQuery, manyQuery, plain, savedKey, signIn, forget, setUnread, linearShown, inboxUnread } from "./linearapi.js";
 
 const TITLE = 22;
 const TOOLBAR = 32;
@@ -385,7 +385,7 @@ export default class Linear {
           rows = conn?.nodes ?? [];
           more = Boolean(conn?.pageInfo?.hasNextPage);
         }
-        setUnread(d.notificationsUnreadCount ?? KEEP.unread);
+        if (kind === "inbox") setUnread(inboxUnread(rows));
         if (src === KEEP.src && this.bad) {
           this.status = "";
           this.bad = false;
@@ -744,7 +744,7 @@ export default class Linear {
       const d = await gql(KEEP.token, Q.inbox);
       const rows = [...(d.notifications?.nodes ?? [])].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
       KEEP.lists.set("inbox", rows);
-      setUnread(d.notificationsUnreadCount ?? KEEP.unread);
+      setUnread(inboxUnread(rows));
       return rows;
     } catch (e) {
       this.say(plain(e), cx, true, 8000);

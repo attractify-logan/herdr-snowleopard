@@ -142,7 +142,7 @@ export async function demoGql(query, v = {}) {
     case "Inbox":
       return copy({ notificationsUnreadCount: unread(), notifications: { nodes: kept().map((x) => ({ ...x, issue: x.issue ? row(I(x.issue)) : undefined })) } });
     case "Unread":
-      return { notificationsUnreadCount: unread() };
+      return copy({ notifications: { nodes: kept() } });
     case "Issue":
       return copy({ issue: I(v.id) ?? null });
     case "Update": {
