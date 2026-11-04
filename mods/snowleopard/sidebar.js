@@ -16,7 +16,7 @@ import {
   C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, pill, statusMark, programIcon, tabIcon, openMenu,
   closeMenus, textured, menuSize, spaceItems, remoteSpaceItems, tabLabel, askCloseTab,
   torn, raiseTorn, tabClose, leadProgram, shortcut, contextLevels, gauge, WIN_APPS, winState, openWin, dockApps, appName,
-  appImage, BUILTIN_APPS,
+  appImage, BUILTIN_APPS, SEEDED_APPS,
 } from "./kit.js";
 import { slackBadge } from "./slackwatch.js";
 import { linearBadge } from "./linearapi.js";
@@ -189,7 +189,7 @@ export default class Sidebar {
       const win = WIN_APPS[name];
       const n = UNREAD[win]?.() ?? 0;
       const kept = dockApps().find((a) => appName(a.path) === name);
-      const path = kept?.icon ? kept.path : BUILTIN_APPS[name]?.path;
+      const path = kept?.icon ? kept.path : BUILTIN_APPS[name]?.path ?? SEEDED_APPS[name];
       for (const s of all)
         for (const t of s.tabs.filter((x) => x.name === name && isAppTab(x) && (!x.settled || out[x.id]))) {
           const sel = s.active && t.active && !out[t.id];

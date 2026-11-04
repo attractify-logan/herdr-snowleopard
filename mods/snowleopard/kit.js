@@ -638,7 +638,7 @@ export function programIcon(program, size, o = {}) {
  *  as the Dock does; any other tab its lead program's. */
 export function tabIcon(spaceId, tab, size) {
   const app = WIN_APPS[tab.name] && panes().some((p) => p.tab === tab.id && p.mod === "snowleopard");
-  const path = app ? dockApps().find((a) => appName(a.path) === tab.name)?.path ?? BUILTIN_APPS[tab.name]?.path : null;
+  const path = app ? dockApps().find((a) => appName(a.path) === tab.name)?.path ?? BUILTIN_APPS[tab.name]?.path ?? SEEDED_APPS[tab.name] : null;
   return path ? appImage(path, size) : programIcon(leadProgram(spaceId, tab.id), size, { small: true });
 }
 
@@ -1500,7 +1500,7 @@ export function builtinApp(path) {
 }
 
 // Mac apps that open inside Herdr and join the Dock once by themselves, as Linear does.
-const SEEDED_APPS = { Messages: "/System/Applications/Messages.app" };
+export const SEEDED_APPS = { Messages: "/System/Applications/Messages.app" };
 
 /** The built-in apps (and Messages) go in the Dock once, as Obsidian and Slack would if installed; removing one keeps it out. */
 export function seedBuiltinApps() {
