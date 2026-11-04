@@ -82,8 +82,10 @@ function dayLine(t) {
 /** Two letters for a name's tile, or none for a bare number or address (it gets a person). */
 function initials(name) {
   if (/^[+(\d]/.test(name) || name.includes("@")) return "";
-  const w = name.split(/[\s,]+/).filter(Boolean);
-  return ((w[0]?.[0] ?? "") + (w[1]?.[0] ?? "")).toUpperCase();
+  // Each word's first letter, whole (not half an emoji): "🎉 Party" is "P".
+  const first = (x) => [...x].find((ch) => /\p{L}|\p{N}/u.test(ch)) ?? "";
+  const w = name.split(/[\s,]+/).map(first).filter(Boolean);
+  return w.slice(0, 2).join("").toUpperCase();
 }
 
 /** Mail's source-list count: a gray-blue pill, white on a selected row. */
@@ -575,6 +577,19 @@ export default class IMessage {
       .child(h_flex().absolute().top(TITLE).left(0).w_full().h(TOOLBAR).px(8).pb(3).gap(10).items_center().children(this.tools(false)));
   }
 
+  /** A conversation's row, or a plain one with its name where it can't be drawn (the window says why). */
+  safeRow(c, n, live) {
+    try {
+      return this.convRow(c, n, live);
+    } catch (e) {
+      if (!this.status) {
+        this.status = `A conversation couldn't be shown (${String(e?.message ?? e).slice(0, 80)}).`;
+        this.bad = true;
+      }
+      return h_flex().h(ROW).w_full().pl(54).items_center().text_size(12).text_color(C.gray).child(clean(c.name) || "Conversation");
+    }
+  }
+
   convRow(c, n, live) {
     const on = c.id === KEEP.cur;
     const fg = on ? "#ffffff" : C.text;
@@ -604,7 +619,7 @@ export default class IMessage {
             h_flex()
               .gap(6)
               .items_baseline()
-              .child(div().flex_1().min_w(0).truncate().text_size(12).font_weight(n > 0 || on ? 700 : 400).text_color(fg).child(c.name))
+              .child(div().flex_1().min_w(0).truncate().text_size(12).font_weight(n > 0 || on ? 700 : 400).text_color(fg).child(clean(c.name)))
               .child(div().flex_none().text_size(10).text_color(dim).child(listDate(c.last.t))),
           )
           .child(
@@ -633,7 +648,7 @@ export default class IMessage {
           .flex_1()
           .min_h(0)
           .child(
-            v_virtual_list("im-convs", rows.length, ROW, (i) => rows[i].id, (range) => rows.slice(range.start, range.end).map((c) => this.convRow(c, news[c.id] ?? 0, live)))
+            v_virtual_list("im-convs", rows.length, ROW, (i) => rows[i].id, (range) => rows.slice(range.start, range.end).map((c) => this.safeRow(c, news[c.id] ?? 0, live)))
               .size_full()
               .on_item_click((id, cx) => {
                 this.focus.focus();
@@ -679,18 +694,17 @@ export default class IMessage {
       .child(div().absolute().top(1).left(6).right(6).h(9).rounded(6).bg(m.mine ? "#ffffff30" : "#ffffffa0"))
       .when(Boolean(m.text), (el) => el.child(div().relative().text_size(13).text_color(fg).child(m.text)))
       .children(
-        m.files.map((f, i) =>
+        // Links to look at, opened by a click on the message (the list's on_item_click): a row of a
+        // virtual list may not hold handlers of its own.
+        m.files.map((f) =>
           h_flex()
-            .id(`imf-${m.id}-${i}`)
             .relative()
             .gap(4)
             .items_center()
             .text_size(12)
             .text_color(m.mine ? "#ffffff" : "#1f5bd6")
             .child("📎")
-            .child(div().underline().child(clean(f.name)))
-            .tooltip(f.path)
-            .on_click(() => exec("open", [f.path]).catch(() => {})),
+            .child(div().underline().child(clean(f.name))),
         ),
       );
     return v_flex()
@@ -785,6 +799,11 @@ export default class IMessage {
               .on_scroll_wheel((e) => {
                 if (e.delta.y > 0) this.follow = false;
                 else if (this.vis.hi >= rows.length - 1) this.follow = true;
+              })
+              // A click on a message with an attachment opens it (the right-click menu has them all).
+              .on_item_click((id) => {
+                const f = rows.find((x) => String(x.id) === String(id))?.files[0];
+                if (f) exec("open", [f.path]).catch(() => {});
               })
               .on_item_secondary_click((id, e) => this.msgMenu(id, e)),
           )
