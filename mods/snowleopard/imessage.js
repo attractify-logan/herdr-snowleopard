@@ -678,7 +678,8 @@ export default class IMessage {
   message(m, prev, c, maxW) {
     const gap = !prev || m.t - prev.t > 15 * 60000;
     const head = c?.group && !m.mine && (gap || prev?.who !== m.who || prev?.mine);
-    const blue = m.mine && c?.service !== "SMS";
+    // Green for a text sent by SMS, even in a conversation that now goes by iMessage.
+    const blue = m.mine && (m.service || c?.service) !== "SMS";
     const bg = m.mine ? (blue ? "#2f7bf5" : "#36b34a") : "#e3e5e8";
     const fg = m.mine ? "#ffffff" : "#111111";
     const bubble = div()

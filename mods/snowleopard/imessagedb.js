@@ -46,24 +46,27 @@ const REAL = (m) => `${m}.item_type = 0 AND ${m}.associated_message_type = 0`;
 
 export const SQL = {
   // Each conversation and its newest message. Unread (their ROWIDs, so Herdr's own read marks
-  // can count only what came after them): not mine, not read in Messages, and after my last
-  // reply there (a reply means it was read, wherever).
-  convs: `SELECT c.ROWID AS id, c.guid, c.chat_identifier AS ident, c.service_name AS service, c.display_name AS title, c.style,
+  // can count only what came after them): not mine, not read in Messages (the message's flag,
+  // and the chat's "read up to" time, which Messages keeps more faithfully when you read on
+  // your phone), and after my last reply there (a reply means it was read, wherever); replied
+  // is that reply, so chats merged into one conversation can share it.
+  convs: (lr = true) => `SELECT c.ROWID AS id, c.guid, c.chat_identifier AS ident, c.service_name AS service, c.display_name AS title, c.style,
   (SELECT group_concat(h.id, char(9)) FROM chat_handle_join x JOIN handle h ON h.ROWID = x.handle_id WHERE x.chat_id = c.ROWID) AS members,
   m.ROWID AS last, ${T("m.date")} AS t, ${TEXT("m")}, m.is_from_me AS mine, m.cache_has_attachments AS att,
+  IFNULL((SELECT max(z.message_id) FROM chat_message_join z JOIN message v ON v.ROWID = z.message_id WHERE z.chat_id = c.ROWID AND v.is_from_me = 1), 0) AS replied,
   (SELECT group_concat(u.ROWID) FROM chat_message_join y JOIN message u ON u.ROWID = y.message_id
-    WHERE y.chat_id = c.ROWID AND u.is_read = 0 AND u.is_from_me = 0 AND ${REAL("u")}
+    WHERE y.chat_id = c.ROWID AND u.is_read = 0 AND u.is_from_me = 0 AND ${REAL("u")}${lr ? " AND u.date > IFNULL(c.last_read_message_timestamp, 0)" : ""}
     AND u.ROWID > IFNULL((SELECT max(z.message_id) FROM chat_message_join z JOIN message v ON v.ROWID = z.message_id WHERE z.chat_id = c.ROWID AND v.is_from_me = 1), 0)) AS unread
 FROM chat c
 JOIN message m ON m.ROWID = (SELECT max(j.message_id) FROM chat_message_join j JOIN message k ON k.ROWID = j.message_id WHERE j.chat_id = c.ROWID AND ${REAL("k")})
 ORDER BY m.ROWID DESC LIMIT 300;`,
   // A conversation's newest 200 messages (newest first), with their attachments. Lists are
   // joined with tabs and newlines: JSON escapes those, and some sqlite3 builds mangle other control characters.
-  thread: (id) => `SELECT m.ROWID AS id, ${T("m.date")} AS t, ${TEXT("m")}, m.is_from_me AS mine, h.id AS who, m.error,
+  thread: (ids) => `SELECT m.ROWID AS id, ${T("m.date")} AS t, ${TEXT("m")}, m.is_from_me AS mine, h.id AS who, m.error, m.service,
   (SELECT group_concat(IFNULL(a.transfer_name, '') || char(9) || IFNULL(a.filename, '') || char(9) || IFNULL(a.mime_type, ''), char(10))
     FROM message_attachment_join x JOIN attachment a ON a.ROWID = x.attachment_id WHERE x.message_id = m.ROWID) AS files
 FROM chat_message_join j JOIN message m ON m.ROWID = j.message_id LEFT JOIN handle h ON h.ROWID = m.handle_id
-WHERE j.chat_id = ${Number(id)} AND ${REAL("m")}
+WHERE j.chat_id IN (${[].concat(ids).map(Number).join(",")}) AND ${REAL("m")}
 ORDER BY m.ROWID DESC LIMIT 200;`,
   // Messages newer than a ROWID, for banners.
   since: (n) => `SELECT m.ROWID AS id, j.chat_id AS chat, ${T("m.date")} AS t, ${TEXT("m")}, m.is_from_me AS mine, h.id AS who, m.cache_has_attachments AS att
@@ -102,7 +105,9 @@ async function sql(query, force = false) {
   if (r.code !== 0) {
     const err = r.stderr ?? "";
     if (/authori[sz]ation denied|unable to open|not permitted|no such table: (chat|message)/i.test(err)) throw new Error("access");
-    throw new Error(err.trim().split("\n").pop() || "sqlite failed");
+    // The line that says what went wrong: newer sqlite3 follows it with the query and an arrow.
+    const lines = err.trim().split("\n");
+    throw new Error((lines.find((l) => /error|no such|unable|locked|malformed/i.test(l)) ?? lines[0] ?? "").replace(/^(Parse )?Error:?( near line \d+:)?( in prepare,)?\s*/i, "") || "sqlite failed");
   }
   return r.stdout.trim() ? JSON.parse(r.stdout) : [];
 }
@@ -235,12 +240,15 @@ async function loadNames() {
     });
   }
   const names = new Map();
+  const who = new Map();
   for (const r of rows) {
     const name = [r.f, r.l].filter(Boolean).join(" ") || r.o;
     const k = handleKey(r.v);
     if (name && k && !names.has(k)) names.set(k, name);
+    if (k && r.pk != null && !who.has(k)) who.set(k, `${r.book ?? 0}-${r.pk}`);
   }
   KEEP.names = names;
+  KEEP.who = who;
   if (!(await demoOn())) loadPhotos(rows).catch(() => {});
 }
 
@@ -293,15 +301,26 @@ export function photoFor(c) {
 /** The conversations, newest first, with their names and unread counts. */
 export async function loadConvs(force = false) {
   const demo = await demoOn();
-  const rows = demo ? demoConvs() : await sql(SQL.convs, force);
+  let rows;
+  if (demo) rows = demoConvs();
+  else
+    try {
+      rows = await sql(SQL.convs(!KEEP.noReadTime), force);
+    } catch (e) {
+      // An older Messages database without the chat's read time: the messages' own flags then.
+      if (!/no such column/i.test(e?.message ?? "")) throw e;
+      KEEP.noReadTime = true;
+      rows = await sql(SQL.convs(false), force);
+    }
   await loadNames();
   KEEP.error = null;
-  KEEP.convs = rows.map((r) => {
+  const list = rows.map((r) => {
     const members = String(r.members ?? "").split("\t").filter(Boolean);
     const group = r.style === 43 || members.length > 1;
     const name = r.title || (group ? members.map((m) => firstName(nameFor(m))).join(", ") || "Group" : nameFor(r.ident || members[0]));
     return {
       id: String(r.id),
+      ids: [String(r.id)],
       guid: r.guid,
       ident: r.ident,
       service: r.service || "iMessage",
@@ -309,12 +328,57 @@ export async function loadConvs(force = false) {
       name,
       members,
       last: { id: Number(r.last), t: Number(r.t), text: words(r) || (r.att ? "Attachment" : ""), mine: Boolean(r.mine) },
+      replied: Number(r.replied ?? 0),
       unread: String(r.unread ?? "").split(",").filter(Boolean).map(Number),
     };
   });
+  KEEP.convs = merge(list);
+  KEEP.chatTo = new Map(KEEP.convs.flatMap((c) => c.ids.map((x) => [x, c.id])));
   const top = KEEP.convs.reduce((n, c) => Math.max(n, c.last.id), 0);
   if (top > KEEP.last) KEEP.last = top;
   return KEEP.convs;
+}
+
+/**
+ * One conversation per person, as Messages shows it: Messages keeps a separate chat for each
+ * service and address (an iMessage chat and an SMS chat, or a phone number and an email on one
+ * contact). Their messages are read together, sent by iMessage when one of them is iMessage, and
+ * known by the lowest chat id among them, which doesn't move when another becomes the newest.
+ */
+function merge(list) {
+  const out = [];
+  const by = new Map();
+  for (const c of list) {
+    if (c.group) {
+      out.push(c);
+      continue;
+    }
+    const h = c.ident || c.members[0];
+    const k = KEEP.who?.get(handleKey(h)) ?? handleKey(h);
+    const into = k ? by.get(k) : null;
+    if (!into) {
+      if (k) by.set(k, c);
+      out.push(c);
+      continue;
+    }
+    // The list is newest first, so `into` keeps the newest message.
+    into.ids.push(c.id);
+    into.unread = into.unread.concat(c.unread);
+    into.replied = Math.max(into.replied, c.replied);
+    if (into.service !== "iMessage" && c.service === "iMessage") Object.assign(into, { service: c.service, ident: c.ident, guid: c.guid });
+  }
+  for (const c of out) {
+    if (c.ids.length < 2) continue;
+    c.id = c.ids.reduce((a, x) => (Number(x) < Number(a) ? x : a));
+    // A reply in any of its chats means what came before it was read.
+    c.unread = c.unread.filter((x) => x > c.replied);
+  }
+  return out;
+}
+
+/** The conversation a chat (Messages' own id) is part of. */
+export function convOf(chat) {
+  return KEEP.chatTo?.get(String(chat)) ?? String(chat);
 }
 
 function firstName(n) {
@@ -323,7 +387,8 @@ function firstName(n) {
 
 /** A conversation's messages, oldest first. */
 export async function loadThread(id) {
-  const rows = (await demoOn()) ? demoThread(id) : await sql(SQL.thread(id));
+  const ids = KEEP.convs.find((c) => c.id === String(id))?.ids ?? [String(id)];
+  const rows = (await demoOn()) ? demoThread(ids) : await sql(SQL.thread(ids));
   const out = [];
   for (const r of [...rows].reverse()) {
     const files = String(r.files ?? "")
@@ -333,7 +398,7 @@ export async function loadThread(id) {
         const [name, path, mime] = f.split("\t");
         return { name: name || String(path ?? "").split("/").pop() || "Attachment", path: String(path ?? "").replace(/^~/, home()), mime: mime ?? "" };
       });
-    out.push({ id: Number(r.id), t: Number(r.t), text: words(r), mine: Boolean(r.mine), who: r.who ?? "", failed: Boolean(r.error), files });
+    out.push({ id: Number(r.id), t: Number(r.t), text: words(r), mine: Boolean(r.mine), who: r.who ?? "", failed: Boolean(r.error), service: r.service ?? "", files });
   }
   KEEP.msgs.set(String(id), out);
   return out;
@@ -541,18 +606,18 @@ async function news() {
   }
   const incoming = fresh.filter((m) => !m.mine);
   const shown = imessageShown();
-  const out = incoming.filter((m) => !(shown && KEEP.cur === String(m.chat)));
+  const out = incoming.filter((m) => !(shown && KEEP.cur === convOf(m.chat)));
   if (!out.length) return;
   // A burst (Messages catching up after sleep) is one banner, not a stack of them.
   if (out.length > 3) {
-    const chats = new Set(out.map((m) => String(m.chat)));
-    W.last = String(out[out.length - 1].chat);
+    const chats = new Set(out.map((m) => convOf(m.chat)));
+    W.last = convOf(out[out.length - 1].chat);
     return banner(`${out.length} new messages`, chats.size === 1 ? `In ${KEEP.convs.find((c) => chats.has(c.id))?.name ?? "one conversation"}` : `In ${chats.size} conversations`);
   }
   for (const m of out) {
-    const c = KEEP.convs.find((x) => x.id === String(m.chat));
+    const c = KEEP.convs.find((x) => x.id === convOf(m.chat));
     const text = words(m) || (m.att ? "Sent an attachment" : "New message");
-    W.last = String(m.chat);
+    W.last = convOf(m.chat);
     banner(c?.name ?? nameFor(m.who), c?.group ? `${firstName(nameFor(m.who))}: ${text}` : text);
   }
 }

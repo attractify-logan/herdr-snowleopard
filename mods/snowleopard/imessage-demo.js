@@ -26,6 +26,8 @@ const CHATS = [
   { id: 4, guid: "iMessage;+;chat400500600", ident: "chat400500600", service: "iMessage", title: "", style: 43, members: ["mom", "dad"] },
   { id: 5, guid: "SMS;-;+15555550199", ident: "+15555550199", service: "SMS", title: "", style: 45, members: [] },
   { id: 6, guid: "iMessage;-;+15555550178", ident: H("priya"), service: "iMessage", title: "", style: 45, members: ["priya"] },
+  // Priya again, by SMS: Messages keeps a separate chat per service; Herdr shows the two as one.
+  { id: 7, guid: "SMS;-;+15555550178", ident: H("priya"), service: "SMS", title: "", style: 45, members: ["priya"] },
 ];
 
 let n = 100;
@@ -59,6 +61,7 @@ m(1, 25, "maya", "Hey! Are you around this afternoon?");
 m(1, 22, "me", "Mostly, after 3. What's up?");
 m(1, 8, "maya", "Want to grab coffee and go over the plan for Saturday?", { read: false });
 m(1, 6, "maya", "I can come to you 😊", { read: false, blob: true });
+m(7, 3, "priya", "On the train with no data, so this is a text. Photos tonight!");
 
 /** Text as Messages keeps it on recent macOS: an NSAttributedString typedstream, in hex. */
 function blob(text) {
@@ -92,14 +95,16 @@ export function demoConvs() {
     const last = mine[mine.length - 1];
     const replied = mine.filter((x) => x.mine).reduce((a, x) => Math.max(a, x.id), 0);
     const unread = mine.filter((x) => !x.mine && !x.read && x.id > replied).map((x) => x.id).join(",");
-    out.push({ id: c.id, guid: c.guid, ident: c.ident, service: c.service, title: c.title, style: c.style, members: membersOf(c), last: last.id, t: last.t, ...textOf(last), mine: last.mine ? 1 : 0, att: last.files.length ? 1 : 0, unread });
+    out.push({ id: c.id, guid: c.guid, ident: c.ident, service: c.service, title: c.title, style: c.style, members: membersOf(c), last: last.id, t: last.t, ...textOf(last), mine: last.mine ? 1 : 0, att: last.files.length ? 1 : 0, replied, unread });
   }
   return out.sort((a, b) => b.last - a.last);
 }
 
-export function demoThread(id) {
-  return MSGS.filter((x) => x.chat === Number(id))
-    .map((x) => ({ id: x.id, t: x.t, ...textOf(x), mine: x.mine ? 1 : 0, who: x.who, error: x.error, files: filesOf(x) }))
+/** A conversation's messages (from each of its chats), newest first. */
+export function demoThread(ids) {
+  const chats = new Set([].concat(ids).map(Number));
+  return MSGS.filter((x) => chats.has(x.chat))
+    .map((x) => ({ id: x.id, t: x.t, ...textOf(x), mine: x.mine ? 1 : 0, who: x.who, error: x.error, service: CHATS.find((c) => c.id === x.chat)?.service ?? "", files: filesOf(x) }))
     .reverse();
 }
 
