@@ -83,8 +83,8 @@ and Dock icon runs a real Herdr command.
   Linear's settings) kept in your Keychain, and checks every 30 s while it's
   on screen; Sign Out is in the ⚙ menu. Pictures show as links, and new
   issues, labels and cycles are made in Linear itself (Open in Linear).
-- **Messages (beta).** With Messages in the Dock, its icon (or Window ›
-  Messages) opens your iMessage and text conversations in an Aqua window
+- **Messages (beta).** Messages joins the Dock once by itself, as Linear
+  does (Remove from Dock keeps it out). Its icon (or Window › Messages) opens your iMessage and text conversations in an Aqua window
   inside Herdr, or from its right-click menu as a tab. Conversations sit in a
   list, newest first, with each one's latest message and a blue dot and count
   when it's unread. The open one shows as bubbles: blue for what you sent
@@ -115,10 +115,14 @@ and Dock icon runs a real Herdr command.
     field and the window says so.
 - **Dock applications.** View › Dock Applications… keeps any app in the Dock
   beside Herdr, with a light under the running ones. Right-click one to open
-  the shown space's folder in it.
+  the shown space's folder in it. An app that keeps its icon only in its
+  asset catalog (no .icns) gets the icon Finder shows.
 - **Source list.** AGENTS sits on top: the ones that need you first (oldest
   first), then done, then working, each with its space and machine under its
-  name. Spaces follow, grouped by machine. A space's triangle lists its tabs;
+  name. APPS comes next: Messages, Slack, Linear and notes open as a tab
+  (with its space under its name) or a window, each with its unread count;
+  their tabs aren't listed again under their spaces. Spaces follow, grouped
+  by machine. A space's triangle lists its tabs;
   hover a tab or an agent for a close button. A spinner means working, a red
   badge means it needs you, and a blue dot means done. It scrolls with an
   Aqua scrollbar.

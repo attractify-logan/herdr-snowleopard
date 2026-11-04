@@ -1,7 +1,9 @@
 // The source list: Finder's sidebar. SPACES grouped by machine (THIS MAC,
 // then each other machine), each a folder with its tab count or the
-// most urgent agent's mark; AGENTS below with the spinner, a red badge
-// when one needs you and Mail's blue dot when one finished. Selected rows
+// most urgent agent's mark; AGENTS above with the spinner, a red badge
+// when one needs you and Mail's blue dot when one finished; APPS between
+// them: Messages, Slack, Linear and notes open as a tab or a window, with
+// their unread counts (their tabs leave their spaces' lists). Selected rows
 // get the blue gradient (graphite when the window isn't key). The bottom
 // bar holds + (new space) and the action gear. A space's disclosure triangle
 // lists its tabs under it (the shown space's are open); hovering a tab or an
@@ -13,8 +15,21 @@ import { spaces, agents, machines, panes, run, setAgentOrder } from "herdr";
 import {
   C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, pill, statusMark, programIcon, tabIcon, openMenu,
   closeMenus, textured, menuSize, spaceItems, remoteSpaceItems, tabLabel, askCloseTab,
-  torn, raiseTorn, tabClose, leadProgram, shortcut, contextLevels, gauge,
+  torn, raiseTorn, tabClose, leadProgram, shortcut, contextLevels, gauge, WIN_APPS, winState, openWin, dockApps, appName,
+  appImage, BUILTIN_APPS,
 } from "./kit.js";
+import { slackBadge } from "./slackwatch.js";
+import { linearBadge } from "./linearapi.js";
+import { imessageBadge } from "./imessagedb.js";
+
+const UNREAD = { slack: slackBadge, linear: linearBadge, imessage: imessageBadge };
+// The Apps section's order: the ones that talk to you first.
+const APPS = ["Messages", "Slack", "Linear", "Obsidian"];
+
+/** A tab holding one of the layout's app views (Slack, Linear, Messages, notes), not a terminal. */
+function isAppTab(t) {
+  return Boolean(WIN_APPS[t.name]) && panes().some((p) => p.tab === t.id && p.mod === "snowleopard");
+}
 
 const ROW = 22;
 
@@ -154,6 +169,63 @@ export default class Sidebar {
       );
   }
 
+  tabMenu(t, e) {
+    closeMenus();
+    openMenu(
+      [
+        { label: "Rename Tab…", act: { sheet: ["rename", { what: "tab", id: t.id }] } },
+        { label: "Close Tab…", shortcut: shortcut("tab.close"), act: { sheet: ["closetab", { tab: t.id }] } },
+      ],
+      { x: e.position.x, y: e.position.y },
+      { owner: `tb-${t.id}` },
+    );
+  }
+
+  /** APPS: each app open as a tab (in any space) or as a window, with its unread count. */
+  apps(all) {
+    const rows = [];
+    const out = torn();
+    for (const name of APPS) {
+      const win = WIN_APPS[name];
+      const n = UNREAD[win]?.() ?? 0;
+      const kept = dockApps().find((a) => appName(a.path) === name);
+      const path = kept?.icon ? kept.path : BUILTIN_APPS[name]?.path;
+      for (const s of all)
+        for (const t of s.tabs.filter((x) => x.name === name && isAppTab(x) && (!x.settled || out[x.id]))) {
+          const sel = s.active && t.active && !out[t.id];
+          rows.push(
+            this.row(`ap-${t.id}`, {
+              selected: sel,
+              icon: tabIcon(s.id, t, 16),
+              label: tabLabel(s.id, t),
+              sub: out[t.id] ? "window" : `${s.name}${s.machine ? ` on ${s.machine}` : ""}`,
+              subRoom: 90,
+              mark: n ? pill(n, { selected: sel }) : null,
+              onClick: () => {
+                if (out[t.id]) return raiseTorn(t.id);
+                run("space.select", { id: s.id });
+                run("tab.select", { id: t.id });
+              },
+              onClose: () => askCloseTab(t.id),
+              onRight: (e) => this.tabMenu(t, e),
+            }),
+          );
+        }
+      const st = winState(win);
+      if (st.open || st.min)
+        rows.push(
+          this.row(`ap-win-${win}`, {
+            icon: path ? appImage(path, 16) : image(ICON.herdr).w(16).h(16),
+            label: name === "Obsidian" ? "Notes" : name,
+            sub: st.min ? "in the Dock" : "window",
+            mark: n ? pill(n) : null,
+            onClick: () => openWin(win),
+          }),
+        );
+    }
+    return rows;
+  }
+
   spaceMenu(s, e, above = false) {
     closeMenus();
     const items = spaceItems(s);
@@ -205,6 +277,11 @@ export default class Sidebar {
           );
         }
     }
+    const apps = this.apps(all);
+    if (apps.length) {
+      sections.push(this.heading("apps", "Apps"));
+      if (!this.fold.apps) sections.push(...apps);
+    }
     for (const g of groups) {
       const id = `m-${g.name ?? "local"}`;
       sections.push(this.heading(id, g.name ? g.name : "This Mac", g.list.some((s) => s.status === "blocked")));
@@ -224,9 +301,10 @@ export default class Sidebar {
       if (shown) this.last[mk] = shown.id;
       for (const s of g.list) {
         const urgent = s.status === "blocked" || s.status === "done" || s.status === "working";
-        const tabs = s.tabs.filter((t) => !t.settled).length;
+        // App tabs are listed under APPS, not here.
+        const tabs = s.tabs.filter((t) => !t.settled && !isAppTab(t)).length;
         const out = torn();
-        const list = s.tabs.filter((t) => !t.settled || out[t.id]);
+        const list = s.tabs.filter((t) => (!t.settled || out[t.id]) && !isAppTab(t));
         // A space's tabs show when it's the shown space (or its machine's last shown one, so
         // showing another machine's space closes nothing here) or something there needs you,
         // unless its triangle has been clicked: that choice wins.
@@ -261,17 +339,7 @@ export default class Sidebar {
                   run("tab.select", { id: t.id });
                 },
                 onClose: () => askCloseTab(t.id),
-                onRight: (e) => {
-                  closeMenus();
-                  openMenu(
-                    [
-                      { label: "Rename Tab…", act: { sheet: ["rename", { what: "tab", id: t.id }] } },
-                      { label: "Close Tab…", shortcut: shortcut("tab.close"), act: { sheet: ["closetab", { tab: t.id }] } },
-                    ],
-                    { x: e.position.x, y: e.position.y },
-                    { owner: `tb-${t.id}` },
-                  );
-                },
+                onRight: (e) => this.tabMenu(t, e),
               }),
             );
           }
