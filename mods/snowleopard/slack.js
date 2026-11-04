@@ -1,7 +1,8 @@
 // Slack, opened from Slack's Dock icon: as a tab in the main window (props
 // inTab; the default, since floating windows always stay above the main one),
-// or in its own Aqua window (an app window, see kit.js). A source list of your channels and direct
-// messages, the open conversation's messages (Slack's mrkdwn as Markdown,
+// or in its own Aqua window (an app window, see kit.js). A source list of your conversations in
+// Slack's sections (Starred, Channels, Direct Messages, Apps; each folds, direct messages newest
+// first; right-click one to star it), the open conversation's messages (Slack's mrkdwn as Markdown,
 // names for user ids, threads collapsed to "N replies": click one to read it
 // beside), and a field to send. It polls: the open conversation every 5 s,
 // the list every 2 minutes. Slack's own app stays one right-click away.
@@ -15,18 +16,22 @@
 
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, TextView, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
-import { props, exec, closeOverlay, setShared, run } from "herdr";
+import { props, exec, closeOverlay, setShared, shared, run } from "herdr";
 import {
-  C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, aquaButton, closeMenus, winState, setWin, noteWinSpot,
+  C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, bead, textured, aquaButton, closeMenus, openMenu, menuSize, appSize, winState, setWin, noteWinSpot,
   closeWin, zoomWin, startTornResize, dockApps, appIcon, appName, openWin, slackTab, aquaScrollbar, dragScroll, endScroll,
 } from "./kit.js";
-import { KEEP, KEYCHAIN, slackApi, slackSignIn, loadUsers, loadConvs, unread, markSeen, slackShown } from "./slackwatch.js";
+import { KEEP, KEYCHAIN, slackApi, slackSignIn, loadUsers, loadConvs, unread, markSeen, slackShown, savedToken, direct, latest, noteLatest, DEMO } from "./slackwatch.js";
 
 const TITLE = 22;
 const TOOLBAR = 32;
 const BAR = 15;
 const SIDE = 220;
 const ROW = 20;
+const HEAD = 26;
+
+// A change from a menu: kit.js perform hands it to the window (sl.slack pick → apply).
+const pick = (p) => ({ slackPick: p });
 
 const SCOPES = ["channels:read", "channels:history", "groups:read", "groups:history", "im:read", "im:history", "mpim:read", "mpim:history", "users:read", "chat:write"];
 const MANIFEST = {
@@ -192,8 +197,8 @@ export default class Slack {
     }
     cx.spawn(async (cx) => {
       try {
-        const r = await exec("security", ["find-generic-password", "-s", KEYCHAIN, "-w"]);
-        if (r.code === 0 && r.stdout.trim()) await this.connect(r.stdout.trim(), cx);
+        const token = await savedToken();
+        if (token) await this.connect(token, cx);
       } catch {}
       this.ready = true;
       cx.notify();
@@ -261,7 +266,8 @@ export default class Slack {
   }
 
   async signOut(cx) {
-    await exec("security", ["delete-generic-password", "-s", KEYCHAIN]).catch(() => {});
+    // The demo's made-up sign-in was never in the Keychain.
+    if (this.token !== DEMO) await exec("security", ["delete-generic-password", "-s", KEYCHAIN]).catch(() => {});
     this.token = null;
     this.me = null;
     this.convs = [];
@@ -331,13 +337,15 @@ export default class Slack {
     setWin("slack", { last: id });
     this.status = "";
     cx.notify();
-    this.fetch(id, cx, true);
+    // A click's cx ends with the click: the fetch gets its own.
+    cx.spawn((cx) => this.fetch(id, cx, true));
   }
 
   async fetch(id, cx, jump = false) {
     try {
       const j = await this.api("conversations.history", { channel: id, limit: 60 });
       const rows = this.convert(j.messages ?? []);
+      if (rows.length) noteLatest({ [id]: rows[rows.length - 1].ts });
       // On screen, so read: clears its unread count (slackwatch.js).
       if (id === this.cur && !this.thread && rows.length && slackShown()) markSeen(id, rows[rows.length - 1].ts);
       const before = this.msgs.get(id);
@@ -434,7 +442,7 @@ export default class Slack {
 
   header(live) {
     const conv = this.convs.find((c) => c.id === this.cur);
-    const where = conv ? (conv.kind === "dm" || conv.kind === "group" ? conv.name : `#${conv.name}`) : "Slack";
+    const where = conv ? (direct(conv) ? conv.name : `#${conv.name}`) : "Slack";
     const title = this.me ? `${where} — ${this.me.team}` : "Slack";
     const app = dockApps().find((a) => appName(a.path) === "Slack");
     const bare = this.bare();
@@ -494,7 +502,8 @@ export default class Slack {
   convRow(c, news) {
     const on = c.id === this.cur;
     const n = news?.n ?? 0;
-    const mark = c.kind === "channel" ? "#" : c.kind === "private" ? "🔒" : c.kind === "group" ? "◆" : "●";
+    const mark = { channel: "#", private: "🔒", group: "◆", app: "▪", dm: "●" }[c.kind] ?? "#";
+    const tint = { dm: "#2fa443", app: "#8a94a3" }[c.kind] ?? "#6a7380";
     return h_flex()
       .id(`c-${c.id}`)
       .relative()
@@ -505,14 +514,92 @@ export default class Slack {
       .gap(6)
       .items_center()
       .when(on, (el) => el.child(fillGrad(C.rowTop, C.rowBot)))
-      .child(div().relative().flex_none().w(12).text_size(c.kind === "dm" ? 8 : 12).text_color(on ? "#ffffff" : c.kind === "dm" ? "#2fa443" : "#6a7380").child(mark))
+      .child(div().relative().flex_none().w(12).text_size(c.kind === "dm" ? 8 : 12).text_color(on ? "#ffffff" : tint).child(mark))
       .child(div().relative().flex_1().min_w(0).truncate().text_size(12).text_color(on ? "#ffffff" : C.text).font_weight(on || n ? 700 : 400).child(c.name))
       .when(n > 0, (el) => el.child(countPill(n, on, news?.mention)));
   }
 
+  /** A section's heading, as the main sidebar draws one; folded, it still shows the section's unread. */
+  headRow(h) {
+    return h_flex()
+      .id(`h-${h.id}`)
+      .h(HEAD)
+      .w_full()
+      .pt(8)
+      .pl(4)
+      .pr(8)
+      .gap(3)
+      .items_center()
+      .child(div().flex_none().w(10).text_size(8).text_color(C.heading).child(h.open ? "▼" : "▶"))
+      .child(div().flex_1().min_w(0).child(embossed(h.label.toUpperCase(), { size: 11, bold: true, color: C.heading, shadow: "#ffffffc0" })))
+      .when(!h.open && h.n > 0, (el) => el.child(countPill(h.n, false, h.mention)));
+  }
+
+  /** The list's rows: each section's heading, then its conversations unless it's folded. */
+  sections(news) {
+    const stars = new Set(shared("sl.slackStars") ?? []);
+    const fold = shared("sl.slackFold") ?? {};
+    const t = latest();
+    // Newest first; a stable sort, so ones never seen keep their A to Z order.
+    const recent = (a, b) => Number(t[b.id] ?? 0) - Number(t[a.id] ?? 0);
+    const rest = this.convs.filter((c) => !stars.has(c.id));
+    const groups = [
+      ["starred", "Starred", this.convs.filter((c) => stars.has(c.id))],
+      ["channels", "Channels", rest.filter((c) => !direct(c))],
+      ["dms", "Direct Messages", rest.filter((c) => c.kind === "dm" || c.kind === "group").sort(recent)],
+      ["apps", "Apps", rest.filter((c) => c.kind === "app").sort(recent)],
+    ];
+    const rows = [];
+    for (const [id, label, list] of groups) {
+      if (!list.length) continue;
+      const open = !fold[id];
+      let n = 0;
+      let mention = false;
+      for (const c of list) {
+        n += news[c.id]?.n ?? 0;
+        mention ||= Boolean(news[c.id]?.mention);
+      }
+      rows.push({ head: true, id, label, open, n, mention });
+      if (open) rows.push(...list);
+    }
+    return rows;
+  }
+
+  /** Right-click on a conversation: star it, mark it read, or open it in Slack's app. */
+  convMenu(id, e) {
+    const c = this.convs.find((x) => x.id === id);
+    if (!c) return;
+    const starred = (shared("sl.slackStars") ?? []).includes(id);
+    const app = dockApps().find((a) => appName(a.path) === "Slack");
+    const items = [
+      { label: starred ? "Remove from Starred" : "Star Conversation", act: pick({ do: "star", id }) },
+      { label: "Mark as Read", disabled: !unread()[id], act: pick({ do: "read", id }) },
+    ];
+    if (app && this.me?.teamId) items.push({ sep: true }, { label: "Open in Slack", act: { open: `slack://channel?team=${this.me.teamId}&id=${id}` } });
+    closeMenus();
+    const p = e?.position;
+    if (!p) return openMenu(items, undefined, { owner: "slack-conv" });
+    const { h } = menuSize(items);
+    const a = appSize();
+    openMenu(items, { x: p.x, y: a && p.y + h + 12 > a.h ? Math.max(24, p.y - h) : p.y }, { owner: "slack-conv" });
+  }
+
+  /** A change picked from a menu (kit.js perform → sl.slack pick). */
+  apply(p, cx) {
+    if (p.do === "star") {
+      const stars = shared("sl.slackStars") ?? [];
+      setShared("sl.slackStars", stars.includes(p.id) ? stars.filter((x) => x !== p.id) : [...stars, p.id]);
+    } else if (p.do === "read") {
+      const ts = this.msgs.get(p.id)?.slice(-1)[0]?.ts ?? latest()[p.id];
+      if (ts) markSeen(p.id, String(ts));
+    }
+    cx.notify();
+  }
+
   sidebar(live) {
-    const rows = this.convs;
     const news = unread();
+    const rows = this.sections(news);
+    const sizes = rows.map((r) => (r.head ? HEAD : ROW));
     return v_flex()
       .id("sl-side")
       .relative()
@@ -520,17 +607,24 @@ export default class Slack {
       .w(SIDE)
       .h_full()
       .bg(live ? C.source : C.sourceOff)
-      .pt(6)
-      .child(div().flex_none().px(10).pb(3).text_size(11).font_weight(700).text_color(C.heading).child((this.me?.team ?? "SLACK").toUpperCase()))
       .child(
         v_flex()
           .relative()
           .flex_1()
           .min_h(0)
           .child(
-            v_virtual_list("sl-convs", rows.length, ROW, (i) => rows[i].id, (range) => rows.slice(range.start, range.end).map((c) => this.convRow(c, news[c.id])))
+            v_virtual_list("sl-convs", rows.length, sizes.length ? sizes : ROW, (i) => (rows[i].head ? `h:${rows[i].id}` : rows[i].id), (range) =>
+              rows.slice(range.start, range.end).map((r) => (r.head ? this.headRow(r) : this.convRow(r, news[r.id]))),
+            )
               .size_full()
-              .on_item_click((id, cx) => this.open(id, cx)),
+              .on_item_click((id, cx) => {
+                if (id.startsWith("h:")) {
+                  const fold = shared("sl.slackFold") ?? {};
+                  const s = id.slice(2);
+                  setShared("sl.slackFold", { ...fold, [s]: !fold[s] });
+                } else this.open(id, cx);
+              })
+              .on_item_secondary_click((id, e) => !id.startsWith("h:") && this.convMenu(id, e)),
           ),
       )
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
@@ -666,7 +760,7 @@ export default class Slack {
               })
               .on_item_click((ts, cx) => {
                 const m = rows.find((r) => r.ts === ts);
-                if (!this.thread && m?.replies) this.openThread(ts, cx);
+                if (!this.thread && m?.replies) cx.spawn((cx) => this.openThread(ts, cx));
               }),
           )
           .child(this.scrollbar(sizes)),
@@ -929,6 +1023,15 @@ export default class Slack {
 
   render(cx) {
     const p = props() ?? {};
+    // A pick from one of this window's menus (kit.js perform sets it), applied once.
+    const pk = winState("slack").pick;
+    if (pk && pk.at !== this.picked) {
+      this.picked = pk.at;
+      cx.timer.after(0, (cx) => {
+        setWin("slack", { pick: null });
+        this.apply(pk, cx);
+      });
+    }
     const goto = winState("slack").goto;
     if (goto && goto !== this.went && this.token) {
       this.went = goto;

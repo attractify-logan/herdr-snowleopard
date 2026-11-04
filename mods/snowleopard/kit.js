@@ -776,7 +776,7 @@ export function openSheet(kind, p = {}) {
   });
 }
 
-/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen, zoomWindow, tearOff: tab, raise: tab, putBack: tab, mergeAll, launch: [app, folder?], reveal: path, unDock: app, win: name, pref: [name, value], copy: text, linearPick: change, imessageTab, imessagePick: change }. */
+/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen, zoomWindow, tearOff: tab, raise: tab, putBack: tab, mergeAll, launch: [app, folder?], reveal: path, unDock: app, win: name, pref: [name, value], copy: text, linearPick: change, imessageTab, imessagePick: change, slackPick: change }. */
 export function perform(act) {
   if (!act) return;
   if (act.run?.[0] === "tab.new") newTab(act.run[1] ?? {});
@@ -800,6 +800,7 @@ export function perform(act) {
   if (act.linearPick) setWin("linear", { pick: { ...act.linearPick, at: Date.now() } });
   if (act.imessageTab) openImessageTab();
   if (act.imessagePick) setWin("imessage", { pick: { ...act.imessagePick, at: Date.now() } });
+  if (act.slackPick) setWin("slack", { pick: { ...act.slackPick, at: Date.now() } });
   if (typeof act.copy === "string") exec("/bin/sh", ["-c", 'printf %s "$1" | pbcopy', "sh", act.copy]).catch(() => {});
   if (act.mergeAll) mergeAll();
   if (act.pref) setPref(act.pref[0], act.pref[1]);

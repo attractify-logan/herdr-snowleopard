@@ -11,15 +11,22 @@
 // it read here and, where the token may, in Slack too.
 //
 // The Slack window (slack.js) shares the connection kept here (KEEP).
+//
+// With ~/.config/herdr-app/slack-demo present it answers from a made-up
+// workspace instead (slack-demo.js) and never calls Slack.
 
 import { exec, shared, setShared, notify } from "herdr";
 import { winState, slackTab, dockApps, appName, appIcon } from "./kit.js";
+import { demoApi } from "./slack-demo.js";
 
 export const KEYCHAIN = "herdr-snowleopard-slack";
 
 // What Slack knows, kept across the window's copies (a resize, zoom or restore
 // reopens it) and shared with the watch. A mod reload starts it over.
 export const KEEP = (globalThis.__snowleopardSlack ??= { token: null, me: null, users: new Map(), convs: [], cur: null, msgs: new Map(), thread: null });
+// Apps and bots (their direct messages list under Apps), and display names by @handle (group DMs are named by handles).
+KEEP.bots ??= new Set();
+KEEP.handles ??= new Map();
 const W = (globalThis.__snowleopardSlackWatch ??= { owner: null, beat: 0, busy: 0, tokenAt: 0, convsAt: 0, dm: 0, ch: 0, unread: {}, base: {}, last: null });
 
 const form = (o) =>
@@ -28,7 +35,23 @@ const form = (o) =>
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
     .join("&");
 
+export const DEMO = "demo";
+
+/** Is the demo switched on (a file in Herdr's folder)? */
+export async function demoOn() {
+  const r = await exec("/bin/sh", ["-c", '[ -f "$HOME/.config/herdr-app/slack-demo" ]']).catch(() => null);
+  return r?.code === 0;
+}
+
+/** The token kept in the Keychain, the demo's, or "". */
+export async function savedToken() {
+  if (await demoOn()) return DEMO;
+  const r = await exec("security", ["find-generic-password", "-s", KEYCHAIN, "-w"]);
+  return r.code === 0 ? r.stdout.trim() : "";
+}
+
 export async function slackApi(token, method, params = {}) {
+  if (token === DEMO) return demoApi(method, params);
   const r = await fetch(`https://slack.com/api/${method}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/x-www-form-urlencoded; charset=utf-8" },
@@ -44,7 +67,7 @@ export async function slackApi(token, method, params = {}) {
 export async function slackSignIn(token) {
   const who = await slackApi(token, "auth.test");
   KEEP.token = token;
-  KEEP.me = { user: who.user_id, team: who.team, bot: token.startsWith("xoxb-"), name: who.user };
+  KEEP.me = { user: who.user_id, team: who.team, teamId: who.team_id, bot: token.startsWith("xoxb-"), name: who.user };
   return KEEP.me;
 }
 
@@ -52,7 +75,12 @@ export async function loadUsers() {
   let cursor;
   for (let page = 0; page < 10; page++) {
     const j = await slackApi(KEEP.token, "users.list", { limit: 200, cursor });
-    for (const u of j.members ?? []) KEEP.users.set(u.id, u.profile?.display_name || u.real_name || u.name);
+    for (const u of j.members ?? []) {
+      const name = u.profile?.display_name || u.real_name || u.name;
+      KEEP.users.set(u.id, name);
+      if (u.name) KEEP.handles.set(u.name, name);
+      if (u.is_bot || u.is_app_user || u.id === "USLACKBOT") KEEP.bots.add(u.id);
+    }
     cursor = j.response_metadata?.next_cursor;
     if (!cursor) break;
   }
@@ -66,20 +94,50 @@ export async function loadConvs() {
     for (const c of j.channels ?? []) {
       if (c.is_im) {
         if (c.is_user_deleted) continue;
-        out.push({ id: c.id, kind: "dm", name: KEEP.users.get(c.user) ?? c.user });
+        const name = KEEP.users.get(c.user) ?? c.user;
+        if (KEEP.bots.has(c.user)) out.push({ id: c.id, kind: "app", name });
+        else out.push({ id: c.id, kind: "dm", name: c.user === KEEP.me?.user ? `${name} (you)` : name });
       } else if (c.is_mpim) {
-        const names = (c.name ?? "").replace(/^mpdm-/, "").replace(/-\d+$/, "").split("--");
-        out.push({ id: c.id, kind: "group", name: names.join(", ") });
+        // mpdm-ann--bo--me-1: everyone but you, by name.
+        const handles = (c.name ?? "").replace(/^mpdm-/, "").replace(/-\d+$/, "").split("--");
+        const others = handles.filter((h) => h !== KEEP.me?.name);
+        out.push({ id: c.id, kind: "group", name: (others.length ? others : handles).map((h) => KEEP.handles.get(h) ?? h).join(", ") });
       } else out.push({ id: c.id, kind: c.is_private ? "private" : "channel", name: c.name });
     }
     cursor = j.response_metadata?.next_cursor;
     if (!cursor) break;
   }
-  const order = { channel: 0, private: 0, group: 1, dm: 1 };
   const lower = (s) => s.toLowerCase();
-  KEEP.convs = out.sort((a, b) => order[a.kind] - order[b.kind] || (lower(a.name) < lower(b.name) ? -1 : lower(a.name) > lower(b.name) ? 1 : 0));
+  KEEP.convs = out.sort((a, b) => (lower(a.name) < lower(b.name) ? -1 : lower(a.name) > lower(b.name) ? 1 : 0));
   W.convsAt = Date.now();
+  // Direct messages list newest first: the time of each one's latest message, once, for those not known yet.
+  const known = latest();
+  const missing = KEEP.convs.filter((c) => direct(c) && !known[c.id]).slice(0, 40);
+  if (missing.length) {
+    const got = {};
+    for (const c of missing) {
+      const info = await slackApi(KEEP.token, "conversations.info", { channel: c.id }).catch(() => null);
+      got[c.id] = Number(info?.channel?.latest?.ts ?? 0) || 1;
+    }
+    noteLatest(got);
+  }
   return KEEP.convs;
+}
+
+/** A direct conversation: one person, a group, or an app. */
+export const direct = (c) => c.kind === "dm" || c.kind === "group" || c.kind === "app";
+
+/** When each conversation last had a message (Slack ts in seconds), as far as Herdr has seen. */
+export function latest() {
+  return shared("sl.slackLatest") ?? {};
+}
+
+/** Notes newer latest times ({ id: ts }); written only when something moved. */
+export function noteLatest(times) {
+  const was = latest();
+  let next = null;
+  for (const [id, ts] of Object.entries(times)) if (Number(ts) > Number(was[id] ?? 0)) (next ??= { ...was })[id] = Number(ts);
+  if (next) setShared("sl.slackLatest", next);
 }
 
 /** Unread counts by conversation id: { n, mention }. */
@@ -93,7 +151,7 @@ export function slackBadge() {
   const u = unread();
   for (const c of KEEP.convs) {
     const x = u[c.id];
-    if (x && (c.kind === "dm" || c.kind === "group" || x.mention)) n += x.n;
+    if (x && (direct(c) || x.mention)) n += x.n;
   }
   return n;
 }
@@ -165,18 +223,17 @@ async function check() {
     if (Object.keys(unread()).length) setShared("sl.slackUnread", {});
     if (now - W.tokenAt < 300000) return;
     W.tokenAt = now;
-    const r = await exec("security", ["find-generic-password", "-s", KEYCHAIN, "-w"]);
-    const token = r.code === 0 ? r.stdout.trim() : "";
+    const token = await savedToken();
     if (!token) return;
     await slackSignIn(token);
   }
   if (!KEEP.me) await slackSignIn(KEEP.token);
   if (!KEEP.users.size) await loadUsers();
   if (!KEEP.convs.length || now - W.convsAt > 120000) await loadConvs();
-  const direct = KEEP.convs.filter((c) => c.kind === "dm" || c.kind === "group");
-  const rooms = KEEP.convs.filter((c) => c.kind === "channel" || c.kind === "private");
+  const dms = KEEP.convs.filter(direct);
+  const rooms = KEEP.convs.filter((c) => !direct(c));
   const pick = [];
-  for (let i = 0; i < Math.min(3, direct.length); i++) pick.push(direct[W.dm++ % direct.length]);
+  for (let i = 0; i < Math.min(3, dms.length); i++) pick.push(dms[W.dm++ % dms.length]);
   if (rooms.length) pick.push(rooms[W.ch++ % rooms.length]);
   for (const c of pick) await checkConv(c);
   publish();
@@ -188,6 +245,7 @@ async function checkConv(c) {
   const token = KEEP.token;
   const me = KEEP.me?.user;
   const info = (await slackApi(token, "conversations.info", { channel: c.id })).channel ?? {};
+  if (info.latest?.ts) noteLatest({ [c.id]: info.latest.ts });
   const seen = (shared("sl.slackSeen") ?? {})[c.id];
   let since = Math.max(Number(info.last_read ?? 0), Number(seen ?? 0));
   const first = W.base[c.id] === undefined;
@@ -210,10 +268,11 @@ async function checkConv(c) {
   const mention = Boolean(me) && msgs.some((m) => (m.text ?? "").includes(`<@${me}>`));
   W.unread[c.id] = msgs.length ? { n: msgs.length, mention } : null;
   const newest = msgs[0];
+  if (h.messages?.[0]?.ts) noteLatest({ [c.id]: h.messages[0].ts });
   const base = Number(W.base[c.id] ?? 0);
   W.base[c.id] = Math.max(base, since, Number(newest?.ts ?? 0));
   if (first || !newest || Number(newest.ts) <= base) return;
-  if (!(c.kind === "dm" || c.kind === "group" || mention)) return;
+  if (!(direct(c) || mention)) return;
   if (KEEP.cur === c.id && slackShown()) return;
   banner(c, newest);
 }
@@ -236,12 +295,12 @@ function plain(text) {
 function banner(c, m) {
   W.last = c.id;
   const who = m.user ? KEEP.users.get(m.user) ?? m.user : m.username ?? m.bot_profile?.name ?? "Slack";
-  const where = c.kind === "dm" ? who : c.kind === "group" ? c.name : `#${c.name}`;
+  const where = c.kind === "group" ? c.name : direct(c) ? who : `#${c.name}`;
   const words = plain(m.text) || (m.files?.length ? "Sent a file" : "New message");
   const app = dockApps().find((a) => appName(a.path) === "Slack");
   notify({
     title: where,
-    body: c.kind === "dm" ? words : `${who}: ${words}`,
+    body: c.kind === "group" || !direct(c) ? `${who}: ${words}` : words,
     level: "info",
     timeout: 8000,
     ...(app?.icon ? { icon: appIcon(app.path) } : {}),

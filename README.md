@@ -46,8 +46,12 @@ and Dock icon runs a real Herdr command.
   is open, and Refresh (⌘R) pulls a git vault (as Obsidian Git's Pull does) and
   rereads it at once. Obsidian itself stays one right-click away.
 - **Slack (beta).** With Slack in the Dock, its icon opens Slack as a tab in
-  the main window (or, from its right-click menu, in its own Aqua window): channels and DMs, messages with names and threads, and a
-  field to send. It uses a small Slack app of your own (the window's setup
+  the main window (or, from its right-click menu, in its own Aqua window): your conversations in
+  Slack's sections (Starred, Channels, Direct Messages with the newest first, and Apps for bots
+  like GitHub or Slackbot; click a heading to fold it, and a folded one still shows its unread),
+  messages with names and threads, and a field to send. Right-click a conversation to star it
+  (stars are kept in Herdr: Slack doesn't share its own with apps), mark it read or open it in
+  Slack. It uses a small Slack app of your own (the window's setup
   panel creates it) and keeps the token in your Keychain. Unread
   conversations get a count in Slack's list, the Dock's Slack icon a red
   badge for direct messages and mentions, and a new one a banner (click it to
@@ -56,6 +60,8 @@ and Dock icon runs a real Herdr command.
   conversation, 10 s for the watch), so there are no huddles or file uploads.
   Use your User OAuth Token (`xoxp-`): a bot token shows the bot's
   conversations, not yours.
+  `touch ~/.config/herdr-app/slack-demo` shows a made-up workspace instead,
+  for screenshots, and never calls Slack.
 - **Linear (beta).** Linear sits in the Dock as an app of its own (no Linear
   app needed; its icon is fetched from linear.app the first time; Remove from Dock and Dock Applications… take it out and put it
   back). Its icon, or Window › Linear, opens Linear as a tab, or from its
