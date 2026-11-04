@@ -180,6 +180,11 @@ export default class IMessage {
     cx.timer.every(120, (cx) => {
       if (`${this.vis.lo},${this.vis.hi}` !== this.drawn) cx.notify();
     });
+    // The Dock's watch found something new (its banner is already up): draw now, which refetches
+    // the open conversation, rather than at the next redraw something else asks for.
+    cx.timer.every(1000, (cx) => {
+      if (this.on() && (shared("sl.imessageTick") ?? 0) !== this.tick) cx.notify();
+    });
     // The demo switched on or off: seen here too, not only by the Dock's watch.
     cx.timer.every(5000, (cx) =>
       cx.spawn(async (cx) => {
