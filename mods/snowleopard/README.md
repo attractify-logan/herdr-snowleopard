@@ -5,7 +5,9 @@ Terminal.app profiles in `themes/snowleopard*.json`, and this mod.
 One mod, many roles (`main.js`): menubar, titlebar, sidebar, tabs, pane
 (split pane strip), status, dock, desk (bare desktop spacers), menu, sheet,
 drag (overlays), aqua (a torn-off window's title bar) notes (the
-Obsidian vault in an Aqua window) and slack (Slack in an Aqua window). `kit.js` draws
+Obsidian vault in an Aqua window), slack (Slack), linear (Linear) and imessage
+(Messages: `imessage.js`, with `imessagedb.js` reading chat.db and sending, and
+`imessage-demo.js` behind the `imessage-demo` flag file). `kit.js` draws
 Aqua: gradients as px paths, glass beads (traffic lights, badges), textured
 toolbar buttons, pulsing default buttons, menus.
 
@@ -32,7 +34,7 @@ Keys (`keys.json` here, section `layout:snowleopard`): `ctrl-f2` walks the menu
 bar menus, `cmd-alt-escape` Force Quit, `cmd-m` minimize, `ctrl-cmd-f` full
 screen, `f2`/`shift-f2` rename, `cmd-t` new tab (asks its name), `cmd-w` close
 tab (asks only when something runs). Mod commands:
-`snowleopard.<apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes|slack|slacktab|newtab|closetab|prefs|usage>`.
+`snowleopard.<apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes|slack|slacktab|imessage|imessagetab|imessageunread|imessagedemo|newtab|closetab|prefs|usage>`.
 
 `notice.js` draws the Growl-style notice (overlay `sl-notice`) and picks the
 next agent that needs you; `usage.js` fetches plan usage on the busiest

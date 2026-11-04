@@ -83,6 +83,36 @@ and Dock icon runs a real Herdr command.
   Linear's settings) kept in your Keychain, and checks every 30 s while it's
   on screen; Sign Out is in the ⚙ menu. Pictures show as links, and new
   issues, labels and cycles are made in Linear itself (Open in Linear).
+- **Messages (beta).** With Messages in the Dock, its icon (or Window ›
+  Messages) opens your iMessage and text conversations in an Aqua window
+  inside Herdr, or from its right-click menu as a tab. Conversations sit in a
+  list, newest first, with each one's latest message and a blue dot and count
+  when it's unread. The open one shows as bubbles: blue for what you sent
+  (green for SMS), gray for what you got, with names in groups. Type in the
+  field and press Return to send through Messages.
+  - **New messages.** The Dock's Messages icon shows a red badge, and each new
+    message brings a banner (click it to open the conversation), even with the
+    window closed. New messages show up within a second or two.
+  - **Right-click menus.** A conversation: Open in Messages, Copy Name, Copy
+    Phone Number or Email Address, Mark as Read, Mark All as Read. A message:
+    Copy, Open Attachment, Show in Finder.
+  - **Search and keys.** The search field (⌘F) finds a conversation by name,
+    phone number or email. ↑ ↓ walk the list, Return moves to the field, ⌘O
+    opens the conversation in Messages, ⌘R checks now.
+  - **Setup.** Nothing is read until you click Read My Messages. Herdr reads
+    Messages' own database on this Mac (`~/Library/Messages/chat.db`) and
+    names from Contacts, and nothing leaves the Mac. That needs Full Disk
+    Access for Herdr, a switch in System Settings › Privacy & Security that
+    the setup panel opens for you; quit and reopen Herdr after turning it on.
+    The first send asks whether Herdr may control Messages. Stop Reading is in
+    the ⚙ menu.
+  - **Limits.** Reading here doesn't mark anything read in Messages or on
+    your phone (that needs Apple's private API), so Herdr keeps its own read
+    marks and its counts can differ from Messages'. There are no tapbacks,
+    edits, unsend or typing indicators. Attachments show as links that open
+    the file. Only the newest 200 messages of a conversation are shown. Group
+    sends can fail in Messages itself; when one does, the text stays in the
+    field and the window says so.
 - **Dock applications.** View › Dock Applications… keeps any app in the Dock
   beside Herdr, with a light under the running ones. Right-click one to open
   the shown space's folder in it.

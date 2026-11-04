@@ -195,6 +195,41 @@ Ocean and Novel, using Terminal.app's ANSI palette.
   isn't on screen posts `notify()` with Slack's icon; its action
   `snowleopard.slackunread` opens Slack to it (`sl.slack.goto`). Reading a
   conversation on screen marks it read here and with `conversations.mark`.
+- **Messages** (`imessage.js`, `imessagedb.js`): Messages' Dock icon opens an
+  app window (`imessage`, 860×580), and its Dock menu a tab named Messages
+  (opening the tab closes the window, and Open in Window closes the tab, so
+  there is one copy). A 250 px source list of conversations (46 px rows:
+  avatar tile with initials, name, date, last message, Mail's count pill and
+  Messages' blue unread dot), a `v_virtual_list` of bubbles measured unseen
+  per width like Slack's (heights keyed by message and the one before it,
+  since a day line or sender name above depends on it), and a rounded send
+  field (iMessage, or Text Message for SMS). Data: `/usr/bin/sqlite3 -readonly
+  -json ~/Library/Messages/chat.db`. Dates are Apple nanoseconds, converted in
+  SQL. `text` is often NULL, so `hex(attributedBody)` comes back and the
+  NSAttributedString typedstream is read in JS: after `NSString`, `+` then a
+  length (a byte, or 0x81 + 2 bytes, or 0x82 + 4) and the UTF-8. Tapbacks
+  (`associated_message_type`) and group events (`item_type`) are left out.
+  Lists inside a row are joined with tabs and newlines, because some sqlite3
+  builds write other control characters into JSON unescaped. Unread is
+  `is_read = 0`, not mine, after my last reply, returned as ROWIDs so Herdr's
+  own marks (`sl.imessageSeen`, conversation → ROWID) count only what came
+  after them. Names come from each `AddressBook-v22.abcddb` (phones keyed by
+  their last 10 digits). Send: `osascript` with the text as an argument (`on
+  run argv`): one-to-one goes to `participant` of the iMessage or SMS account
+  (falling back to `chat id`), and groups go to `chat id` (the chat's guid).
+  Nothing is read until `sl.imessage.on` (the setup panel's Read My Messages),
+  so a Mac whose messages aren't yours stays unread.
+  `~/.config/herdr-app/imessage-demo` swaps in made-up rows
+  (`imessage-demo.js`) and stubs every read and send; `snowleopard.imessagedemo`
+  makes one arrive.
+- **Messages unread** (`imessagedb.js`): the Dock's copy runs
+  `watchFolder(~/Library/Messages)` (a change to `chat.db-wal` triggers a
+  check) plus a check every 15 s, one at a time. A check reloads the list
+  (one query), fetches rows past the last ROWID for banners, and writes
+  `sl.imessageUnread` and `sl.imessageTick` only when they change; a window
+  refetches its open conversation when the tick passes it. Every new incoming
+  message not on screen posts `notify()` with Messages' icon (four or more at
+  once are one banner); `snowleopard.imessageunread` opens it (`sl.imessage.goto`).
 - **Dock applications**: View › Dock Applications… (or right-click Herdr in
   the Dock) lists every app in /Applications, /System/Applications, their
   Utilities and ~/Applications with its icon and an Aqua checkbox; checked
@@ -268,7 +303,7 @@ Ocean and Novel, using Terminal.app's ANSI palette.
 - Optional keys (`keys.json`, section `layout:snowleopard`):
   `"ctrl-f2": "snowleopard.menus"`, `"cmd-alt-escape": "snowleopard.forcequit"`,
   `"cmd-m": "window.minimize"`, `"ctrl-cmd-f": "snowleopard.fullscreen"`,
-  `"f2": "snowleopard.renametab"`, `"shift-f2": "snowleopard.renamespace"`. Mod commands: `snowleopard.apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes|slack|slacktab|slackunread|renametab|renamespace`.
+  `"f2": "snowleopard.renametab"`, `"shift-f2": "snowleopard.renamespace"`. Mod commands: `snowleopard.apple|app|file|edit|view|window|help|menus|about|forcequit|fullscreen|tearoff|mergeall|notes|slack|slacktab|slackunread|imessage|imessagetab|imessageunread|imessagedemo|renametab|renamespace`.
 
 ## Watch out
 
