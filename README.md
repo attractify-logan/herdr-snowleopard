@@ -145,8 +145,11 @@ and Dock icon runs a real Herdr command.
   Tabs that don't fit go into a » menu. Split panes get small title strips.
 - **Dock.** Each space is a folder with its initials and its most urgent
   agent's icon, and a red badge counting the agents that need you. When one
-  starts needing you, its folder hops three times and a small dark notice
-  slides in at the top right (click it to go there). Click Herdr's own icon to
+  starts needing you, its folder hops three times and a small Aqua notice (a
+  light gray panel with the agent's icon) comes up at the top right (click it to
+  go there). Slack's and Messages' banners are the same notice, and several stack
+  down the right edge. Herdr's own toasts (bottom right, such as "… finished")
+  are drawn by Herdr, not this mod. Click Herdr's own icon to
   jump to the next agent that needs you; right-click it for the agents menu.
   Minimized windows wait by the Trash, and the Trash closes a tab or space
   after asking first.

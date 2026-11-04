@@ -1,19 +1,30 @@
-// A Growl "Smoke" notice for an agent that needs you: a translucent black
-// rounded rectangle at the top right, under the menu bar, the program's icon
-// at the left, white Lucida Grande. Click goes to the agent; it closes by
-// itself after a few seconds. The Dock opens it (showNotice); props { role,
-// address, title, detail, program, size }. Also the helpers that name an
-// agent the same way on every surface and pick the one to go to next.
+// A notice in the top right, under the menu bar: a light Aqua panel (a 10.6
+// window's gray gradient, a dark edge and a soft drop shadow) with the
+// program's or app's icon at the left and Lucida Grande beside it. Click runs
+// its action (or goes to the agent); it closes by itself after a few seconds.
+// Several stack downward. The Dock opens one for an agent that needs you
+// (showNotice); Slack and Messages for a new message (showBanner). Props
+// { role, title, detail, program | icon, address | action, timeout, size }.
+// Also the helpers that name an agent the same way on every surface and pick
+// the one to go to next.
 
-import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { props, closeOverlay, openOverlay, run, spaces, agents } from "herdr";
-import { FONT, paint, rrect, programIcon, tabLabel } from "./kit.js";
+import { div, image } from "gpui-kit";
+import { FONT, paint, rrect, vgrad, programIcon, tabLabel } from "./kit.js";
 
-const W = 320;
-const H = 68;
+// The panel, and the window around it: room for the shadow at the sides and below.
+const PW = 320;
+const PH = 62;
+const SH = 8;
+const TOP = 2;
+const W = PW + 2 * SH;
+const H = PH + SH + TOP;
 const SECONDS = 6;
 const MENUBAR = 22;
+
+// Which spots down the right edge are taken, and until when (shared by every copy of the mod).
+const SLOTS = (globalThis.__snowleopardNoticeSlots ??= []);
 
 /** The agent's tab name, as the tab bar and the menus print it. */
 export function agentName(a) {
@@ -54,23 +65,32 @@ export function urgentAgent() {
 /** Opens a notice for an agent that just needs you, replacing the one still up. */
 export function showNotice(a, previous) {
   if (previous) closeOverlay(previous);
+  return showBanner({ title: `${a.program?.name ?? "An agent"} needs you`, detail: agentWhere(a), program: a.program ?? null, address: a.address });
+}
+
+/** Opens a notice in the first free spot down the right edge. n: { title, detail, icon | program, action | address, timeout (ms) }. */
+export function showBanner(n) {
   const v = window.viewport_size();
+  const now = Date.now();
+  const timeout = n.timeout ?? SECONDS * 1000;
+  let i = SLOTS.findIndex((until) => !until || until < now);
+  if (i < 0) i = SLOTS.length < 4 ? SLOTS.length : 0;
+  SLOTS[i] = now + timeout;
   return openOverlay({
     mod: "snowleopard",
     // A window, not a popup: it doesn't take the keyboard from the terminal you're typing in.
     kind: "window",
     frame: "none",
-    key: "sl-notice",
     width: W,
     height: H,
-    ...(v?.width ? { at: { x: Math.round(v.width - W - 12), y: MENUBAR + 8 } } : {}),
-    props: { role: "notice", address: a.address, title: `${a.program?.name ?? "An agent"} needs you`, detail: agentWhere(a), program: a.program ?? null, size: [W, H] },
+    ...(v?.width ? { at: { x: Math.round(v.width - W - 4), y: MENUBAR + 6 + i * (PH + 6) } } : {}),
+    props: { role: "notice", ...n, timeout, size: [W, H] },
   });
 }
 
 export default class Notice {
   init(_p, cx) {
-    cx.timer.after(SECONDS * 1000, () => this.close());
+    cx.timer.after(props()?.timeout ?? SECONDS * 1000, () => this.close());
   }
 
   close() {
@@ -86,30 +106,37 @@ export default class Notice {
       .h(H)
       .font_family(FONT)
       .cursor_pointer()
-      .child(paint(rrect(W, H, 12), "#000000c0", W, H))
+      // A soft shadow: translucent rounded rectangles, wider and fainter outward, a little low.
+      .children([[6, "#00000012"], [4, "#0000001c"], [2, "#0000002a"]].map(([e, c]) => paint(rrect(PW + 2 * e, PH + e, 9 + e, SH - e, TOP + 1), c, W, H)))
+      .child(paint(rrect(PW, PH, 9, SH, TOP), "#00000070", W, H))
+      .child(paint(rrect(PW - 2, PH - 2, 8, SH + 1, TOP + 1), vgrad("#f3f3f3", "#d2d2d2"), W, H))
+      .child(paint(rrect(PW - 16, 1, 0, SH + 8, TOP + 1), "#ffffffd8", W, H))
       .child(
         h_flex()
           .absolute()
-          .top(0)
-          .left(0)
-          .size_full()
+          .top(TOP)
+          .left(SH)
+          .w(PW)
+          .h(PH)
           .items_center()
           .gap(12)
           .px(14)
-          .child(programIcon(p.program, 40))
+          // An agent's program, an app's icon, or (an app not in the Dock) none.
+          .when(Boolean(p.icon || p.address), (el) => el.child(p.icon ? image(p.icon).flex_none().w(40).h(40) : programIcon(p.program, 40)))
           .child(
             v_flex()
               .min_w(0)
               .flex_shrink(1)
               .gap(2)
-              .child(div().truncate().text_size(13).font_weight(700).text_color("#ffffff").child(p.title ?? ""))
-              .child(div().truncate().text_size(12).text_color("#ffffffe0").child(p.detail ?? "")),
+              .child(div().truncate().text_size(13).font_weight(700).text_color("#000000").child(p.title ?? ""))
+              .when(Boolean(p.detail), (el) => el.child(div().truncate().text_size(12).text_color("#3a3a3a").child(p.detail ?? ""))),
           ),
       )
-      // A press here must not drag the window; the click goes to the agent.
+      // A press here must not drag the window; the click goes where the notice says.
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click(() => {
-        if (p.address) run("agent.focus", { terminal: p.address });
+        if (p.action?.name) run(p.action.name, p.action.args ?? {});
+        else if (p.address) run("agent.focus", { terminal: p.address });
         this.close();
       });
   }

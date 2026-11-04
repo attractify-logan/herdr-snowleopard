@@ -15,9 +15,10 @@
 // With ~/.config/herdr-app/slack-demo present it answers from a made-up
 // workspace instead (slack-demo.js) and never calls Slack.
 
-import { exec, shared, setShared, notify } from "herdr";
+import { exec, shared, setShared } from "herdr";
 import { winState, slackTab, dockApps, appName, appIcon } from "./kit.js";
 import { demoApi } from "./slack-demo.js";
+import { showBanner } from "./notice.js";
 
 export const KEYCHAIN = "herdr-snowleopard-slack";
 
@@ -298,10 +299,9 @@ function banner(c, m) {
   const where = c.kind === "group" ? c.name : direct(c) ? who : `#${c.name}`;
   const words = plain(m.text) || (m.files?.length ? "Sent a file" : "New message");
   const app = dockApps().find((a) => appName(a.path) === "Slack");
-  notify({
+  showBanner({
     title: where,
-    body: c.kind === "group" || !direct(c) ? `${who}: ${words}` : words,
-    level: "info",
+    detail: c.kind === "group" || !direct(c) ? `${who}: ${words}` : words,
     timeout: 8000,
     ...(app?.icon ? { icon: appIcon(app.path) } : {}),
     action: { name: "snowleopard.slackunread" },

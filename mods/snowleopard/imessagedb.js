@@ -13,9 +13,10 @@
 // With ~/.config/herdr-app/imessage-demo present it answers from made-up
 // conversations instead (imessage-demo.js) and never touches the database.
 
-import { exec, home, shared, setShared, notify, watchFolder, appHome } from "herdr";
+import { exec, home, shared, setShared, watchFolder, appHome } from "herdr";
 import { winState, setWin, appTab, dockApps, appName, appIcon, APP_ICONS } from "./kit.js";
 import { demoConvs, demoThread, demoSince, demoNames, demoSend } from "./imessage-demo.js";
+import { showBanner } from "./notice.js";
 
 const SQLITE = "/usr/bin/sqlite3";
 const dbPath = () => `${home()}/Library/Messages/chat.db`;
@@ -686,10 +687,9 @@ async function news() {
 
 function banner(title, body) {
   const app = dockApps().find((a) => appName(a.path) === "Messages");
-  notify({
+  showBanner({
     title,
-    body: body.length > 200 ? `${body.slice(0, 199)}…` : body,
-    level: "info",
+    detail: body.length > 200 ? `${body.slice(0, 199)}…` : body,
     timeout: 8000,
     ...(app?.icon ? { icon: appIcon(app.path) } : {}),
     action: { name: "snowleopard.imessageunread" },
