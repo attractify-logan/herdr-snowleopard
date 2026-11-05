@@ -100,12 +100,26 @@ and Dock icon runs a real Herdr command.
   field and press Return to send through Messages. A person's iMessage and
   SMS chats (and their phone number and email) are one conversation, as in
   Messages, and sending goes by iMessage when they have it.
+  - **Tapbacks.** ❤️ 👍 👎 😂 ‼️ ❓ and emoji tapbacks sit at a bubble's top
+    corner as Messages draws them, one pill per kind with a count, blue when
+    one is yours. They come and go live, and a tapback on one of your
+    messages brings a banner ("Laughed at “…”"). Right-click a message to
+    see who left each one. Adding a tapback is Messages' to do (Apple gives
+    other apps no way to), so **Tapback in Messages…** opens the
+    conversation there.
+  - **Link previews.** A link comes as a card with the page's picture,
+    title and site, from the preview Messages already saved, so Herdr fetches
+    nothing from the web. A link with no saved preview (an SMS, say) gets a
+    slim card with its site. Click a message with a link to open it in your
+    browser; right-click for Open Link and Copy Link. A link you send gets
+    its preview once Messages makes one.
   - **New messages.** The Dock's Messages icon shows a red badge, and each new
     message brings a banner (click it to open the conversation), even with the
     window closed. New messages show up within a second or two.
   - **Right-click menus.** A conversation: Open in Messages, Copy Name, Copy
     Phone Number or Email Address, Mark as Read, Mark All as Read. A message:
-    Copy, Open Attachment, Show in Finder.
+    Copy, Open Link, Copy Link, Open Attachment, Show in Finder, who left
+    each tapback, Tapback in Messages….
   - **Search and keys.** The search field (⌘F) finds a conversation by name,
     phone number or email. ↑ ↓ walk the list, Return moves to the field, ⌘O
     opens the conversation in Messages, ⌘R checks now.
@@ -113,14 +127,15 @@ and Dock icon runs a real Herdr command.
     Messages' own database on this Mac (`~/Library/Messages/chat.db`) and
     names and photos from Contacts, and nothing leaves the Mac (the photos are
     copied, 64 px, into the mod's hidden `.icons` folder, which Herdr needs to
-    show them). That needs Full Disk
+    show them, as are link previews' pictures, which go after 90 days). That needs Full Disk
     Access for Herdr, a switch in System Settings › Privacy & Security that
     the setup panel opens for you; quit and reopen Herdr after turning it on.
     The first send asks whether Herdr may control Messages. Stop Reading is in
     the ⚙ menu.
   - **Limits.** Reading here doesn't mark anything read in Messages or on
     your phone (that needs Apple's private API), so Herdr keeps its own read
-    marks and its counts can differ from Messages'. There are no tapbacks,
+    marks and its counts can differ from Messages'. Tapbacks are shown but
+    not sent from here, sticker tapbacks aren't shown, and there are no
     edits, unsend or typing indicators. Attachments show as links that open
     the file. Only the newest 200 messages of a conversation are shown. Group
     sends can fail in Messages itself; when one does, the text stays in the

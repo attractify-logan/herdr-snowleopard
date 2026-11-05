@@ -2,7 +2,8 @@
 // own Aqua window (an app window, see kit.js; the default), or as a tab in the
 // main window (props inTab). Conversations on the left, newest first, with
 // their unread counts and latest message; the open one as bubbles (blue sent,
-// gray received, names in groups); a field to send. Right-click a conversation
+// gray received, names in groups), with their tapbacks at a corner and a link's
+// preview as a card (a click opens it); a field to send. Right-click a conversation
 // to open it in Messages, copy it or mark it read here; the toolbar narrows the
 // list by name. Messages itself is one click away for anything else.
 //
@@ -100,6 +101,68 @@ function countPill(n, on) {
     .h(h)
     .child(paint(rrect(w, h, h / 2), on ? "#ffffff" : vgrad("#93a3bd", "#7b8ca8"), w, h))
     .child(div().absolute().top(0).left(0).size_full().flex().items_center().justify_center().text_size(10).font_weight(700).text_color(on ? "#3875d7" : "#ffffff").child(label));
+}
+
+/** Only web addresses open from a click (a preview's address could be anything). */
+const web = (url) => /^https?:\/\//i.test(String(url ?? ""));
+
+/** A message's tapbacks, as Messages draws them at the bubble's top corner: a pill each, blue for one of mine. */
+function tapbackPills(reacts) {
+  return h_flex()
+    .gap(2)
+    .children(
+      reacts.map((r) =>
+        h_flex()
+          .relative()
+          .h(20)
+          .px(6)
+          .gap(2)
+          .items_center()
+          .rounded_full()
+          .bg(r.mine ? "#2f7bf5" : "#f4f5f7")
+          .border_1()
+          .border_color(r.mine ? "#2563c9" : "#b9bec5")
+          .child(div().absolute().top(1).left(3).right(3).h(8).rounded(5).bg(r.mine ? "#ffffff38" : "#ffffffc0"))
+          .child(div().relative().text_size(11).child(r.emoji))
+          .when(r.n > 1, (el) => el.child(div().relative().text_size(10).font_weight(700).text_color(r.mine ? "#ffffff" : "#4a4a4a").child(String(r.n)))),
+      ),
+    );
+}
+
+/** A link's preview as a card: the page's picture, its title and site; a bare address, a slim card with its site. */
+function linkCard(l, w) {
+  if (!l.title)
+    return h_flex()
+      .relative()
+      .max_w(w)
+      .h(26)
+      .px(10)
+      .gap(6)
+      .items_center()
+      .rounded(13)
+      .bg("#f4f5f7")
+      .border_1()
+      .border_color("#cfd2d6")
+      .child(svg(GLYPH.globe).flex_none().w(12).h(12).text_color("#5a6b80"))
+      .child(div().min_w(0).truncate().text_size(11).font_weight(700).text_color("#1f5bd6").child(clean(l.host || l.url)));
+  const ph = Math.round((w * 252) / 480);
+  return v_flex()
+    .relative()
+    .w(w)
+    .rounded(14)
+    .bg("#f4f5f7")
+    .border_1()
+    .border_color("#cfd2d6")
+    .when(Boolean(l.img), (el) => el.child(image(l.img).w(w - 2).h(ph).rounded_t(13)).child(div().h(1).w_full().bg("#cfd2d6")))
+    .child(
+      v_flex()
+        .px(10)
+        .pt(5)
+        .pb(6)
+        .gap(1)
+        .child(div().text_size(12).font_weight(700).text_color("#111111").child(l.title))
+        .child(div().truncate().text_size(10).text_color(C.gray).child(l.site || l.host)),
+    );
 }
 
 /** A conversation's picture: the contact's photo from Contacts as an iChat buddy picture, else an Aqua gel tile. */
@@ -261,7 +324,9 @@ export default class IMessage {
       const before = KEEP.msgs.get(id);
       const rows = await loadThread(id);
       if (id !== KEEP.cur) return;
-      const changed = !before || before.length !== rows.length || before[before.length - 1]?.id !== rows[rows.length - 1]?.id || before.some((m, i) => m.failed !== rows[i]?.failed);
+      // New messages, a failed send, a tapback put on or taken off, a preview's picture come in.
+      const look = (m) => `${m?.id}${m?.failed ? "!" : ""}${(m?.reacts ?? []).map((r) => `${r.emoji}${r.n}${r.mine ? "*" : ""}`).join("")}${m?.link?.title ? "t" : ""}${m?.link?.img ? "i" : ""}`;
+      const changed = !before || before.length !== rows.length || before.some((m, i) => look(m) !== look(rows[i]));
       if (!changed && !jump) return;
       cx.notify();
       if (jump || this.follow) {
@@ -292,8 +357,8 @@ export default class IMessage {
       try {
         await sendText(c, text);
         this.say("", cx);
-        // Messages writes the sent message a moment later.
-        for (const ms of [300, 1500]) {
+        // Messages writes the sent message a moment later, and a link's preview after that.
+        for (const ms of [300, 1500, 4000]) {
           await cx.sleep(ms);
           await loadConvs().catch(() => {});
           await this.fetch(c.id, cx, true);
@@ -412,11 +477,16 @@ export default class IMessage {
     const m = (KEEP.msgs.get(KEEP.cur) ?? []).find((x) => String(x.id) === String(id));
     if (!m) return;
     const f = m.files[0];
+    const l = m.link;
     this.popup(
       [
         { label: "Copy", disabled: !m.text, act: { copy: m.text } },
+        ...(l ? [{ sep: true }, { label: "Open Link", disabled: !web(l.url), act: { open: l.url } }, { label: "Copy Link", act: { copy: l.url } }] : []),
         ...(f ? [{ sep: true }, { label: m.files.length > 1 ? "Open Attachments" : "Open Attachment", act: { open: f.path } }, { label: "Show in Finder", act: { reveal: f.path } }] : []),
+        // Who left each tapback; adding one is Messages' to do (Apple doesn't let other apps).
+        ...(m.reacts?.length ? [{ sep: true }, ...m.reacts.map((r) => ({ label: `${r.emoji}  ${r.who.join(", ")}`, disabled: true }))] : []),
         { sep: true },
+        { label: "Tapback in Messages…", act: this.openAct(this.conv()) },
         { label: "Open in Messages", act: this.openAct(this.conv()) },
       ],
       e,
@@ -686,7 +756,7 @@ export default class IMessage {
     }
   }
 
-  /** One message: a day line when time has passed, the sender in groups, the bubble, its files. */
+  /** One message: a day line when time has passed, the sender in groups, the bubble, its files, its link's card, its tapbacks. */
   message(m, prev, c, maxW) {
     const gap = !prev || m.t - prev.t > 15 * 60000;
     const head = c?.group && !m.mine && (gap || prev?.who !== m.who || prev?.mine);
@@ -720,6 +790,11 @@ export default class IMessage {
             .child(div().underline().child(clean(f.name))),
         ),
       );
+    // The words' bubble (none for a preview alone), then the link's card; the tapbacks sit on the first.
+    const parts = [...(m.text || m.files.length ? [bubble] : []), ...(m.link ? [linkCard(m.link, Math.min(maxW, 260))] : [])];
+    if (!parts.length) parts.push(bubble);
+    const pills = m.reacts?.length ? tapbackPills(m.reacts) : null;
+    if (pills) parts[0] = div().relative().child(parts[0]).child(div().absolute().top(-14).when(m.mine, (el) => el.left(-10)).when(!m.mine, (el) => el.right(-10)).child(pills));
     return v_flex()
       .id(`im-${m.id}`)
       .w_full()
@@ -728,7 +803,8 @@ export default class IMessage {
       .pb(2)
       .when(gap, (el) => el.child(div().w_full().flex().justify_center().pb(6).text_size(10).font_weight(700).text_color(C.gray).child(dayLine(m.t))))
       .when(head, (el) => el.child(div().pl(12).pb(1).text_size(10).text_color(C.gray).child(clean(nameFor(m.who)))))
-      .child(h_flex().w_full().when(m.mine, (el) => el.justify_end()).child(bubble))
+      .when(Boolean(pills), (el) => el.child(div().h(12)))
+      .children(parts.map((x, i) => h_flex().w_full().when(i > 0, (el) => el.pt(3)).when(m.mine, (el) => el.justify_end()).child(x)))
       .when(m.failed, (el) => el.child(h_flex().w_full().justify_end().pt(1).text_size(10).text_color("#c4281c").child("Not Delivered")));
   }
 
@@ -761,8 +837,9 @@ export default class IMessage {
     this.drawn = `${this.vis.lo},${this.vis.hi}`;
     const w = Math.max(0, (this.feedW ?? 0) - 15);
     const maxW = Math.max(160, Math.round(w * 0.66));
-    // A message's height depends on the one before (the day line, the sender), so the key has both.
-    const k = (i) => `${rows[i].id}:${rows[i - 1]?.id ?? 0}`;
+    // A message's height depends on the one before (the day line, the sender), so the key has both,
+    // and on what can come later: tapbacks, and a preview's picture.
+    const k = (i) => `${rows[i].id}:${rows[i - 1]?.id ?? 0}:${rows[i].reacts?.length ? 1 : 0}${rows[i].link?.img ? 1 : 0}`;
     const hs = this.heights(w);
     const sizes = rows.map((_m, i) => hs.get(k(i)) ?? 40);
     const todo = w > 0 ? rows.map((_m, i) => i).filter((i) => !hs.has(k(i))).slice(0, 60) : [];
@@ -813,10 +890,11 @@ export default class IMessage {
                 if (e.delta.y > 0) this.follow = false;
                 else if (this.vis.hi >= rows.length - 1) this.follow = true;
               })
-              // A click on a message with an attachment opens it (the right-click menu has them all).
+              // A click on a message with a link opens it in the browser, else its attachment (the right-click menu has them all).
               .on_item_click((id) => {
-                const f = rows.find((x) => String(x.id) === String(id))?.files[0];
-                if (f) exec("open", [f.path]).catch(() => {});
+                const m = rows.find((x) => String(x.id) === String(id));
+                const to = web(m?.link?.url) ? m.link.url : m?.files[0]?.path;
+                if (to) exec("open", [to]).catch(() => {});
               })
               .on_item_secondary_click((id, e) => this.msgMenu(id, e)),
           )
@@ -939,7 +1017,7 @@ export default class IMessage {
                 .child(div().text_size(11).text_color(this.bad ? "#9c1b10" : C.dim).child(this.status)),
             ),
           )
-          .child(div().pt(4).text_size(11).text_color(C.gray).child("Reading here doesn't mark messages read in Messages, and tapbacks, edits and typing indicators aren't shown.")),
+          .child(div().pt(4).text_size(11).text_color(C.gray).child("Reading here doesn't mark messages read in Messages. Tapbacks show, but you add them in Messages; edits and typing indicators aren't shown.")),
       )
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
   }
@@ -1081,13 +1159,13 @@ export default class IMessage {
       this.wasOn = reading;
       if (reading && was === false) cx.timer.after(0, (cx) => cx.spawn((cx) => this.reload(cx, true)));
     }
-    // The Dock's watch saw something new: the open conversation again, if it moved.
+    // The Dock's watch saw something new (a message, or a tapback anywhere): the open conversation again.
     const tick = shared("sl.imessageTick") ?? 0;
     if (reading && tick !== this.tick) {
+      const first = this.tick === undefined;
       this.tick = tick;
       const c = this.conv();
-      const rows = KEEP.msgs.get(KEEP.cur);
-      if (c && rows && (rows[rows.length - 1]?.id ?? 0) < c.last.id) cx.timer.after(0, (cx) => cx.spawn((cx) => this.fetch(c.id, cx)));
+      if (c && KEEP.msgs.get(KEEP.cur) && !first) cx.timer.after(0, (cx) => cx.spawn((cx) => this.fetch(c.id, cx)));
     }
     // On screen, so read here (Herdr's marks only).
     const c = this.conv();

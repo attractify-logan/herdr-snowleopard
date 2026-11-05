@@ -15,7 +15,8 @@
 
 import { exec, home, shared, setShared, watchFolder, appHome } from "herdr";
 import { winState, setWin, appTab, dockApps, appName, appIcon, APP_ICONS } from "./kit.js";
-import { demoConvs, demoThread, demoSince, demoNames, demoSend } from "./imessage-demo.js";
+import { demoConvs, demoThread, demoReacts, demoSince, demoNames, demoSend } from "./imessage-demo.js";
+import { linkPreview } from "./plist.js";
 import { showBanner } from "./notice.js";
 
 const SQLITE = "/usr/bin/sqlite3";
@@ -44,6 +45,15 @@ const T = (c) => `((CASE WHEN ${c} > 100000000000 THEN ${c} / 1000000 ELSE ${c} 
 const TEXT = (m) => `${m}.text AS text, CASE WHEN ${m}.text IS NULL THEN hex(${m}.attributedBody) END AS body`;
 // Real messages: no tapbacks (associated_message_type), no "renamed the group" lines (item_type).
 const REAL = (m) => `${m}.item_type = 0 AND ${m}.associated_message_type = 0`;
+// Tapbacks: 2000-2007 put one on (love, like, dislike, laugh, emphasize, question, emoji, sticker), 3000-3007 take it off.
+const TAPBACK = (m) => `${m}.associated_message_type BETWEEN 2000 AND 3007`;
+// A tapback's message: its associated_message_guid is p:<part>/<guid>, bp:<guid> (a link or app balloon), or the guid.
+// A guid is 36 characters; anything after it isn't part of it.
+const TARGET = (m) => `substr(CASE WHEN instr(${m}.associated_message_guid, '/') > 0 THEN substr(${m}.associated_message_guid, instr(${m}.associated_message_guid, '/') + 1)
+    WHEN ${m}.associated_message_guid LIKE 'bp:%' THEN substr(${m}.associated_message_guid, 4) ELSE ${m}.associated_message_guid END, 1, 36)`;
+// The emoji of an emoji tapback (2006), a column only newer databases have.
+const EMOJI = (m, has) => (has ? `${m}.associated_message_emoji` : "NULL");
+const LINK = "com.apple.messages.URLBalloonProvider";
 
 export const SQL = {
   // Each conversation and its newest message. Unread (their ROWIDs, so Herdr's own read marks
@@ -69,16 +79,25 @@ JOIN message m ON m.ROWID = (SELECT max(j.message_id) FROM chat_message_join j J
 ORDER BY m.ROWID DESC LIMIT 300;`,
   // A conversation's newest 200 messages (newest first), with their attachments. Lists are
   // joined with tabs and newlines: JSON escapes those, and some sqlite3 builds mangle other control characters.
-  thread: (ids) => `SELECT m.ROWID AS id, ${T("m.date")} AS t, ${TEXT("m")}, m.is_from_me AS mine, h.id AS who, m.error, m.service,
-  (SELECT group_concat(IFNULL(a.transfer_name, '') || char(9) || IFNULL(a.filename, '') || char(9) || IFNULL(a.mime_type, ''), char(10))
+  // A link's preview is payload_data (an archive plist.js reads), its picture an attachment.
+  thread: (ids) => `SELECT m.ROWID AS id, m.guid, ${T("m.date")} AS t, ${TEXT("m")}, m.is_from_me AS mine, h.id AS who, m.error, m.service,
+  CASE WHEN m.balloon_bundle_id = '${LINK}' THEN hex(m.payload_data) END AS payload,
+  (SELECT group_concat(IFNULL(a.transfer_name, '') || char(9) || IFNULL(a.filename, '') || char(9) || IFNULL(a.mime_type, '') || char(9) || IFNULL(a.total_bytes, 0), char(10))
     FROM message_attachment_join x JOIN attachment a ON a.ROWID = x.attachment_id WHERE x.message_id = m.ROWID) AS files
 FROM chat_message_join j JOIN message m ON m.ROWID = j.message_id LEFT JOIN handle h ON h.ROWID = m.handle_id
 WHERE j.chat_id IN (${[].concat(ids).map(Number).join(",")}) AND ${REAL("m")}
 ORDER BY m.ROWID DESC LIMIT 200;`,
-  // Messages newer than a ROWID, for banners.
-  since: (n) => `SELECT m.ROWID AS id, j.chat_id AS chat, ${T("m.date")} AS t, ${TEXT("m")}, m.is_from_me AS mine, h.id AS who, m.cache_has_attachments AS att
+  // The tapbacks in a conversation after a ROWID, oldest first (the last word on each wins).
+  reacts: (ids, n, emoji) => `SELECT m.ROWID AS id, ${TARGET("m")} AS target, m.associated_message_type AS kind, m.is_from_me AS mine, h.id AS who, ${EMOJI("m", emoji)} AS emoji
+FROM chat_message_join j JOIN message m ON m.ROWID = j.message_id LEFT JOIN handle h ON h.ROWID = m.handle_id
+WHERE j.chat_id IN (${[].concat(ids).map(Number).join(",")}) AND m.ROWID > ${Number(n)} AND ${TAPBACK("m")}
+ORDER BY m.ROWID;`,
+  // Messages and tapbacks newer than a ROWID, for banners: a tapback with the message it's on (tmine, its text).
+  since: (n, emoji) => `SELECT m.ROWID AS id, j.chat_id AS chat, ${T("m.date")} AS t, ${TEXT("m")}, m.is_from_me AS mine, h.id AS who, m.cache_has_attachments AS att,
+  m.associated_message_type AS kind, ${EMOJI("m", emoji)} AS emoji, t.is_from_me AS tmine, t.text AS ttext, CASE WHEN t.text IS NULL THEN hex(t.attributedBody) END AS tbody
 FROM message m JOIN chat_message_join j ON j.message_id = m.ROWID LEFT JOIN handle h ON h.ROWID = m.handle_id
-WHERE m.ROWID > ${Number(n)} AND ${REAL("m")}
+LEFT JOIN message t ON m.associated_message_type >= 2000 AND t.guid = (${TARGET("m")})
+WHERE m.ROWID > ${Number(n)} AND (${REAL("m")} OR ${TAPBACK("m")})
 ORDER BY m.ROWID LIMIT 50;`,
   // Contacts: each phone number and email with its person's name.
   names: `SELECT r.Z_PK AS pk, r.ZFIRSTNAME AS f, r.ZLASTNAME AS l, r.ZORGANIZATION AS o, p.ZFULLNUMBER AS v FROM ZABCDPHONENUMBER p JOIN ZABCDRECORD r ON r.Z_PK = p.ZOWNER
@@ -409,23 +428,170 @@ function firstName(n) {
   return /^[+(\d]/.test(n) || n.includes("@") ? n : n.split(" ")[0];
 }
 
-/** A conversation's messages, oldest first. */
+/** A query that reads the emoji tapback column, again without it on a database too old to have one. */
+async function withEmoji(query) {
+  if (KEEP.noEmoji) return sql(query(false));
+  try {
+    return await sql(query(true));
+  } catch (e) {
+    if (!/no such column/i.test(e?.message ?? "")) throw e;
+    KEEP.noEmoji = true;
+    return sql(query(false));
+  }
+}
+
+/** A conversation's messages, oldest first, each with its tapbacks and its link's preview. */
 export async function loadThread(id) {
   const ids = KEEP.convs.find((c) => c.id === String(id))?.ids ?? [String(id)];
-  const rows = (await demoOn()) ? demoThread(ids) : await sql(SQL.thread(ids));
+  const demo = await demoOn();
+  const rows = demo ? demoThread(ids) : await sql(SQL.thread(ids));
+  const from = rows.reduce((a, r) => Math.min(a, Number(r.id)), Infinity);
+  const reacts = !rows.length ? [] : demo ? demoReacts(ids, from - 1) : await withEmoji((e) => SQL.reacts(ids, from - 1, e)).catch(() => []);
   const out = [];
   for (const r of [...rows].reverse()) {
-    const files = String(r.files ?? "")
+    const all = String(r.files ?? "")
       .split("\n")
       .filter(Boolean)
       .map((f) => {
-        const [name, path, mime] = f.split("\t");
-        return { name: name || String(path ?? "").split("/").pop() || "Attachment", path: String(path ?? "").replace(/^~/, home()), mime: mime ?? "" };
+        const [name, path, mime, size] = f.split("\t");
+        return { name: name || String(path ?? "").split("/").pop() || "Attachment", path: String(path ?? "").replace(/^~/, home()), mime: mime ?? "", size: Number(size) || 0 };
       });
-    out.push({ id: Number(r.id), t: Number(r.t), text: words(r), mine: Boolean(r.mine), who: r.who ?? "", failed: Boolean(r.error), service: r.service ?? "", files });
+    // A preview's pictures are attachments of their own kind, not files to open.
+    const files = all.filter((f) => !f.name.endsWith(".pluginPayloadAttachment"));
+    const text = words(r);
+    out.push({ id: Number(r.id), guid: r.guid ?? "", t: Number(r.t), text, mine: Boolean(r.mine), who: r.who ?? "", failed: Boolean(r.error), service: r.service ?? "", files, link: linkOf(r, text, all), reacts: [] });
   }
-  KEEP.msgs.set(String(id), out);
+  const list = tapbacks(fold(out), reacts);
+  await thumbs(list).catch(() => {});
+  KEEP.msgs.set(String(id), list);
+  return list;
+}
+
+// The first web address in a message's words.
+const URL_RE = /\bhttps?:\/\/[^\s<>"“”]+[^\s<>"“”.,;:!?)\]'’]/i;
+
+/** A message's link: the preview Messages made (title, site, picture), else a bare address in its words, else none. */
+function linkOf(r, text, files) {
+  let p = null;
+  if (r.payload) {
+    const k = `${r.id}:${String(r.payload).length}`;
+    if (!KEEP.previews || KEEP.previews.size > 400) KEEP.previews = new Map();
+    if (!KEEP.previews.has(k))
+      try {
+        KEEP.previews.set(k, linkPreview(r.payload));
+      } catch {
+        KEEP.previews.set(k, null);
+      }
+    p = KEEP.previews.get(k);
+  }
+  const url = p?.url || (text.match(URL_RE)?.[0] ?? "");
+  if (!url) return null;
+  const pics = files.filter((f) => f.name.endsWith(".pluginPayloadAttachment"));
+  // The picture Messages names, else the biggest (the other is the site's icon).
+  const pic = (p?.image != null ? pics[p.image] : null) ?? (pics.length ? pics.reduce((a, f) => (f.size > a.size ? f : a)) : null);
+  return { url, host: hostOf(url), title: short(p?.title, 140), site: short(p?.site, 60), pic: pic?.path ?? null, img: null };
+}
+
+function short(s, n) {
+  const t = clean(s ?? "").replace(/\s+/g, " ").trim();
+  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
+}
+
+function hostOf(url) {
+  return (String(url).match(/^[a-z]+:\/\/([^/?#]+)/i)?.[1] ?? "").replace(/^www\./, "");
+}
+
+/**
+ * Messages may keep a sent link as two rows: the words, then a moment later the link's preview.
+ * Shown as one, as Messages shows it: the preview's row (the newer, which the list counts by) takes the words.
+ */
+function fold(rows) {
+  const out = [];
+  // Words that are only a web address (the preview row's, as Messages keeps it).
+  const bare = (m) => !m.text || m.text.match(URL_RE)?.[0] === m.text;
+  for (const m of rows) {
+    const prev = out[out.length - 1];
+    // The words' address can differ from the preview's (a redirect): the same site is enough.
+    if (prev?.link && !prev.link.title && m.link?.title && prev.mine === m.mine && prev.who === m.who && m.t - prev.t < 60000 && bare(m) && (prev.text.includes(m.link.url) || prev.link.host === m.link.host)) {
+      out.pop();
+      m.text = prev.text;
+      m.also = prev.guid;
+      m.files = prev.files.concat(m.files);
+    }
+    // A message that is only the address: the preview says it.
+    if (m.link?.title && bare(m)) m.text = "";
+    out.push(m);
+  }
   return out;
+}
+
+const TAPBACKS = ["❤️", "👍", "👎", "😂", "‼️", "❓"];
+const VERBS = ["loved", "liked", "disliked", "laughed at", "emphasized", "questioned"];
+
+/** Each message's tapbacks as Messages shows them: one per person (their last word), grouped by kind, mine marked. */
+function tapbacks(rows, events) {
+  const at = new Map();
+  for (const m of rows) {
+    if (m.guid) at.set(m.guid.slice(0, 36), m);
+    if (m.also) at.set(m.also.slice(0, 36), m);
+  }
+  const now = new Map();
+  for (const e of events) {
+    const kind = Number(e.kind);
+    const k = kind % 1000;
+    // Stickers (7) and anything newer aren't drawn.
+    if (k > 6) continue;
+    const key = `${e.mine ? "me" : e.who}|${e.target}`;
+    if (kind >= 3000) {
+      if (now.get(key)?.k === k) now.delete(key);
+    } else now.set(key, { k, emoji: k === 6 ? clean(e.emoji ?? "") : TAPBACKS[k], mine: Boolean(e.mine), who: e.who ?? "", target: e.target });
+  }
+  for (const r of now.values()) {
+    const m = at.get(String(r.target));
+    if (!m || !r.emoji) continue;
+    let g = m.reacts.find((x) => x.emoji === r.emoji);
+    if (!g) m.reacts.push((g = { emoji: r.emoji, n: 0, mine: false, who: [] }));
+    g.n += 1;
+    g.mine ||= r.mine;
+    g.who.push(r.mine ? "You" : firstName(nameFor(r.who)));
+  }
+  return rows;
+}
+
+/** A tapback in words, for a banner: "loved", "laughed at", or "reacted 🔥 to". */
+export function tapbackVerb(kind, emoji) {
+  const k = Number(kind) % 1000;
+  return k === 6 ? `reacted ${clean(emoji ?? "") || "with an emoji"} to` : VERBS[k] ?? "reacted to";
+}
+
+const LINKS = `${APP_ICONS}/links`;
+
+// $1: the folder; $2: lines of <message id><tab><picture>. Each picture becomes <id>.png, 480×252
+// (2× the card's), filled and cropped; one too small to be a picture (a site's icon) is skipped.
+// Pictures made more than 90 days ago go.
+const THUMBS_SH = `out="$1"; mkdir -p "$out"; find "$out" -name '*.png' -mtime +90 -delete 2>/dev/null
+printf '%s\\n' "$2" | while IFS="$(printf '\\t')" read -r id src; do
+  png="$out/$id.png"; [ -n "$id" ] && [ ! -s "$png" ] && [ -f "$src" ] || continue
+  wh=$(sips -g pixelWidth -g pixelHeight "$src" 2>/dev/null | awk '/pixelWidth/ {w = $2} /pixelHeight/ {h = $2} END {print w + 0, h + 0}')
+  w=\${wh% *}; h=\${wh#* }
+  [ "$w" -ge 120 ] && [ "$h" -ge 60 ] || continue
+  if [ $((w * 252)) -gt $((h * 480)) ]; then fit="--resampleHeight 252"; else fit="--resampleWidth 480"; fi
+  sips -s format png $fit "$src" --out "$out/$id.tmp.png" >/dev/null 2>&1 && sips --cropToHeightWidth 252 480 "$out/$id.tmp.png" --out "$png" >/dev/null 2>&1 || rm -f "$png"
+  rm -f "$out/$id.tmp.png"
+done
+ls "$out"`;
+
+/** The previews' pictures, copied where Herdr can show them (its own folder), once each. */
+async function thumbs(rows) {
+  if (!(KEEP.thumbs instanceof Map)) KEEP.thumbs = new Map();
+  const want = rows.filter((m) => m.link?.pic);
+  const todo = want.filter((m) => !KEEP.thumbs.has(m.id));
+  if (todo.length) {
+    const r = await exec("/bin/sh", ["-c", THUMBS_SH, "sh", `${appHome()}/${LINKS}`, todo.map((m) => `${m.id}\t${m.link.pic}`).join("\n")]);
+    const have = new Set(r.stdout.split("\n"));
+    for (const m of todo) KEEP.thumbs.set(m.id, have.has(`${m.id}.png`) ? `${LINKS}/${m.id}.png` : null);
+  }
+  for (const m of want) m.link.img = KEEP.thumbs.get(m.id) ?? null;
 }
 
 // ---- diagnostics
@@ -657,8 +823,11 @@ function check(cx) {
 async function news() {
   const before = KEEP.last;
   const demo = await demoOn();
-  const fresh = demo ? demoSince(before) : before ? await sql(SQL.since(before)) : [];
+  const fresh = demo ? demoSince(before) : before ? await withEmoji((e) => SQL.since(before, e)) : [];
   await loadConvs();
+  // Tapbacks move the tick too (the list's newest message doesn't count them).
+  const top = fresh.reduce((n, m) => Math.max(n, Number(m.id)), 0);
+  if (top > KEEP.last) KEEP.last = top;
   // A tick others can redraw on (the window refetches its open conversation when it moves).
   if (KEEP.last !== (shared("sl.imessageTick") ?? 0)) setShared("sl.imessageTick", KEEP.last);
   publish();
@@ -667,7 +836,9 @@ async function news() {
     W.base = true;
     return;
   }
-  const incoming = fresh.filter((m) => !m.mine);
+  // Their messages, and their tapbacks on mine (as Messages tells of them; taking one off is quiet).
+  const kind = (m) => Number(m.kind ?? 0);
+  const incoming = fresh.filter((m) => !m.mine && (kind(m) === 0 || (kind(m) >= 2000 && kind(m) <= 2006 && Number(m.tmine) === 1)));
   const shown = imessageShown();
   const out = incoming.filter((m) => !(shown && KEEP.cur === convOf(m.chat)));
   if (!out.length) return;
@@ -679,8 +850,16 @@ async function news() {
   }
   for (const m of out) {
     const c = KEEP.convs.find((x) => x.id === convOf(m.chat));
-    const text = words(m) || (m.att ? "Sent an attachment" : "New message");
     W.last = convOf(m.chat);
+    if (kind(m)) {
+      // Loved “Trailhead at 7:30?”, or in a group, Maya loved “…”.
+      const said = words({ text: m.ttext, body: m.tbody });
+      const what = said ? `“${said.length > 60 ? `${said.slice(0, 59)}…` : said}”` : "your message";
+      const verb = tapbackVerb(kind(m), m.emoji);
+      banner(c?.name ?? nameFor(m.who), c?.group ? `${firstName(nameFor(m.who))} ${verb} ${what}` : `${verb[0].toUpperCase()}${verb.slice(1)} ${what}`);
+      continue;
+    }
+    const text = words(m) || (m.att ? "Sent an attachment" : "New message");
     banner(c?.name ?? nameFor(m.who), c?.group ? `${firstName(nameFor(m.who))}: ${text}` : text);
   }
 }

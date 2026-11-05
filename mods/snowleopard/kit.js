@@ -95,6 +95,7 @@ export const GLYPH = {
   inbox: `${A}/icons/inbox.svg`,
   person: `${A}/icons/person.svg`,
   project: `${A}/icons/project.svg`,
+  globe: `${A}/icons/globe.svg`,
 };
 
 /** Is the Herdr window key? Inactive windows go flat and gray, as in Aqua.
