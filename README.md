@@ -192,6 +192,10 @@ and Dock icon runs a real Herdr command.
 
 ![A tab torn off into its own window, and a minimized window in the Dock](screenshots/windows.png)
 
+![Messages in an Aqua window, with Messages under APPS and two threads under an agent](screenshots/messages.png)
+
+![Full screen: the window alone fills the display](screenshots/fullscreen.png)
+
 ## Install
 
 Copy the folders into your Herdr home, then switch to the layout:
