@@ -777,12 +777,17 @@ export function openSheet(kind, p = {}) {
   });
 }
 
-/** Does what a menu item says: { run: [command, args], sheet: [kind, props], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen, zoomWindow, tearOff: tab, raise: tab, putBack: tab, mergeAll, launch: [app, folder?], reveal: path, unDock: app, win: name, pref: [name, value], copy: text, linearPick: change, imessageTab, imessagePick: change, slackPick: change }. */
+/** Does what a menu item says: { run: [command, args], sheet: [kind, props], keepBy: [thread, agent, place], open: path, toggle: node id, look: {...}, newSpaceIn, fullscreen, zoomWindow, tearOff: tab, raise: tab, putBack: tab, mergeAll, launch: [app, folder?], reveal: path, unDock: app, win: name, pref: [name, value], copy: text, linearPick: change, imessageTab, imessagePick: change, slackPick: change }. */
 export function perform(act) {
   if (!act) return;
   if (act.run?.[0] === "tab.new") newTab(act.run[1] ?? {});
   else if (act.run) run(act.run[0], act.run[1] ?? {});
   if (act.sheet) openSheet(act.sheet[0], act.sheet[1] ?? {});
+  // [thread, its agent, "right" | "down"]: show the agent, then give the thread a pane beside it.
+  if (act.keepBy) {
+    run("pane.focus", { terminal: act.keepBy[1] });
+    run("terminal.keep", { terminal: act.keepBy[0], place: act.keepBy[2] });
+  }
   if (act.open) exec("open", [act.open]).catch(() => {});
   if (act.toggle) run("layout.toggle", { id: act.toggle });
   if (act.look) setLook(act.look);

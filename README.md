@@ -146,7 +146,9 @@ and Dock icon runs a real Herdr command.
   asset catalog (no .icns) gets the icon Finder shows.
 - **Source list.** AGENTS sits on top: the ones that need you first (oldest
   first), then done, then working, each with its space and machine under its
-  name. APPS comes next: Messages, Slack, Linear and notes open as a tab
+  name. An agent's threads (the agents it started with `hc run`) sit under
+  it: click one to peek at it, or right-click to open it beside or below its
+  agent, in a new tab, or put it away again. APPS comes next: Messages, Slack, Linear and notes open as a tab
   (with its space under its name) or a window, each with its unread count;
   their tabs aren't listed again under their spaces. Spaces follow, grouped
   by machine. A space's triangle lists its tabs;

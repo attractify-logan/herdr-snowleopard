@@ -7,11 +7,13 @@
 // get the blue gradient (graphite when the window isn't key). The bottom
 // bar holds + (new space) and the action gear. A space's disclosure triangle
 // lists its tabs under it (the shown space's are open); hovering a tab or an
-// agent shows a close button, which asks before closing its tab.
+// agent shows a close button, which asks before closing its tab. An agent's
+// threads (the sub-agents it started with `hc run`) sit under it in AGENTS:
+// click one to peek at it, right-click to open it beside its agent.
 
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, Scrollbar } from "gpui-base";
-import { spaces, agents, machines, panes, run, setAgentOrder } from "herdr";
+import { spaces, agents, machines, panes, terminals, run, setAgentOrder } from "herdr";
 import {
   C, FONT, GLYPH, ICON, key, paint, rrect, vgrad, fillGrad, embossed, pill, statusMark, programIcon, tabIcon, openMenu,
   closeMenus, textured, menuSize, spaceItems, remoteSpaceItems, tabLabel, askCloseTab,
@@ -32,6 +34,13 @@ function isAppTab(t) {
 }
 
 const ROW = 22;
+// AGENTS' order; an agent there only for its threads comes last.
+const RANK = { blocked: 0, done: 1, working: 2, idle: 3 };
+// A thread reports to its agent, so its finishing isn't news (the agent's is); an error is.
+const threadStatus = (k, listed) => {
+  const s = listed.get(k.address)?.status ?? k.status;
+  return s === "error" ? "blocked" : s === "done" ? "idle" : s;
+};
 
 export default class Sidebar {
   init() {
@@ -181,6 +190,46 @@ export default class Sidebar {
     );
   }
 
+  /** A thread under its agent: click to peek (or go to its pane), right-click to open it beside the agent. */
+  threadRow(s, parent, listed) {
+    const k = s.k;
+    const a = listed.get(k.address);
+    const st = threadStatus(k, listed);
+    const name = k.name || k.template || k.program?.name || k.address;
+    return this.row(`th-${k.address}`, {
+      indent: 36 + s.depth * 14,
+      selected: Boolean(a?.focused),
+      icon: programIcon(k.program, 14, { small: true }),
+      label: name,
+      mark: statusMark(st, { selected: a?.focused }),
+      onClick: () => run(a ? "pane.focus" : "terminal.peek", { terminal: k.address }),
+      onRight: (e) => this.threadMenu(k, name, parent, Boolean(a), e),
+    }).tooltip(a ? `${name}: a thread, in a pane` : `${name}: a thread. Click to peek; right-click to open it beside its agent`);
+  }
+
+  threadMenu(k, name, parent, kept, e) {
+    closeMenus();
+    const t = k.address;
+    openMenu(
+      [
+        ...(kept ? [] : [{ label: "Peek", act: { run: ["terminal.peek", { terminal: t }] } }]),
+        { label: "Open Beside Its Agent", act: { keepBy: [t, parent, "right"] } },
+        { label: "Open Below Its Agent", act: { keepBy: [t, parent, "down"] } },
+        { label: "Open in New Tab", act: { run: ["terminal.keep", { terminal: t, place: "tab" }] } },
+        ...(kept ? [{ label: "Put Away", act: { run: ["terminal.park", { terminal: t }] } }] : []),
+        { sep: true },
+        {
+          label: "End Thread…",
+          act: {
+            sheet: ["confirm", { title: `Do you want to end “${name}”?`, detail: "It stops, and so do the threads it started.", yes: "End Thread", command: { name: "terminal.kill", args: { terminal: t } } }],
+          },
+        },
+      ],
+      { x: e.position.x, y: e.position.y },
+      { owner: `th-${t}` },
+    );
+  }
+
   /** APPS: each app open as a tab (in any space) or as a window, with its unread count. */
   apps(all) {
     const rows = [];
@@ -239,13 +288,25 @@ export default class Sidebar {
     const all = spaces();
     const ags = agents();
     const ctx = contextLevels();
+    const listed = new Map(ags.map((a) => [a.address, a]));
+    const terms = terminals();
+    // An agent's live threads, depth first.
+    const threads = (addr, depth = 0) =>
+      terms.filter((k) => k.parent === addr && k.state === "live").flatMap((k) => [{ k, depth }, ...threads(k.address, depth + 1)]);
+    // A thread kept in a pane is an agent too; it stays under its agent, not beside it.
+    const nested = new Set(ags.flatMap((a) => threads(a.address).map((s) => s.k.address)));
     // AGENTS: whoever needs you first (blocked, longest waiting first), then the
-    // finished (newest first), then the working. Idle ones show under their spaces.
-    const rank = { blocked: 0, done: 1, working: 2 };
+    // finished (newest first), then the working, then agents only for their threads.
+    // An agent ranks as its most urgent thread. Idle ones show under their spaces.
+    const rankOf = (x) => Math.min(RANK[x.a.status] ?? 9, ...x.subs.map((s) => RANK[threadStatus(s.k, listed)] ?? RANK.idle));
     const attn = ags
-      .filter((a) => a.status in rank)
-      .sort((a, b) => rank[a.status] - rank[b.status] || (a.status === "blocked" ? a.seq - b.seq : a.status === "done" ? b.seq - a.seq : 0));
-    setAgentOrder(attn.map((a) => a.address).concat(ags.filter((a) => !(a.status in rank)).map((a) => a.address)));
+      .filter((a) => !nested.has(a.address))
+      .map((a) => ({ a, subs: threads(a.address) }))
+      .filter((x) => (x.a.status in RANK && x.a.status !== "idle") || x.subs.length)
+      .map((x) => ({ ...x, r: rankOf(x) }))
+      .sort((x, y) => x.r - y.r || (x.a.status === "blocked" ? x.a.seq - y.a.seq : x.a.status === "done" ? y.a.seq - x.a.seq : 0));
+    const order = attn.flatMap((x) => [x.a.address, ...x.subs.map((s) => s.k.address).filter((t) => listed.has(t))]);
+    setAgentOrder(order.concat(ags.map((a) => a.address).filter((t) => !order.includes(t))));
     // The machine running the most agents first, This Mac first on a tie.
     const load = (name) => ags.filter((a) => (all.find((s) => s.id === a.space)?.machine ?? null) === (name ?? null)).length;
     const groups = machines()
@@ -254,9 +315,9 @@ export default class Sidebar {
     const sections = [];
     // Agents lead the list, so who needs you is never scrolled out of view.
     if (attn.length) {
-      sections.push(this.heading("agents", "Agents", attn.some((a) => a.status === "blocked")));
+      sections.push(this.heading("agents", "Agents", attn.some((x) => x.r === RANK.blocked)));
       if (!this.fold.agents)
-        for (const a of attn) {
+        for (const { a, subs } of attn) {
           const sp = all.find((s) => s.id === a.space);
           const tab = sp?.tabs.find((t) => t.id === a.tab);
           sections.push(
@@ -274,6 +335,7 @@ export default class Sidebar {
                 else run("agent.focus", { terminal: a.address });
               },
             }).tooltip(`${a.program?.name ?? "Agent"} in ${a.space_name} — ${a.title || a.address}${ctx.has(a.address) ? ` · context ${Math.round(ctx.get(a.address))}% full` : ""}`),
+            ...subs.map((s) => this.threadRow(s, a.address, listed)),
           );
         }
     }
