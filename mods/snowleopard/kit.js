@@ -84,6 +84,7 @@ export const GLYPH = {
   splitRight: `${A}/icons/split-right.svg`,
   splitDown: `${A}/icons/split-down.svg`,
   zoom: `${A}/icons/zoom.svg`,
+  fullScreen: `${A}/icons/fullscreen.svg`,
   sidebar: `${A}/icons/sidebar.svg`,
   check: `${A}/icons/check.svg`,
   spinner: `${A}/icons/spinner.svg`,
@@ -762,6 +763,54 @@ export function closeMenus() {
 
 const SHEET = { about: [300, 360], forcequit: [440, 400], dockapps: [400, 480], rename: [420, 170], prefs: [420, 340] };
 
+// ---- full screen, as Lion has it
+
+/** Is the window in full screen? */
+export function fullScreen() {
+  return Boolean(shared("sl.fs"));
+}
+
+/**
+ * Lion's full screen: the menu bar, the Dock and the desktop go, the window fills
+ * the display, and Herdr's own window goes full screen. Again: all of it back as it
+ * was. Shared "sl.fs" keeps whether the Dock was shown, the window's frame, and
+ * whether Herdr's window was full screen already.
+ */
+export function toggleFullScreen() {
+  const was = shared("sl.fs");
+  if (was) {
+    setShared("sl.fs", null);
+    run("layout.resize", { id: "menubar", px: MENUBAR });
+    if (was.dock) run("layout.show", { id: "dock" });
+    if (was.placed) applyFrame(was.placed);
+    else fillDesktop();
+    if (!was.native && appWindow()?.fullscreen) window.toggle_fullscreen();
+    return;
+  }
+  closeMenus();
+  setShared("sl.fs", {
+    dock: shown("dock"),
+    placed: shared("sl.placed") ?? null,
+    native: Boolean(appWindow()?.fullscreen),
+    at: Date.now(),
+  });
+  setShared("sl.placed", null);
+  // The menu bar shrinks away rather than hiding: its copy takes the key commands
+  // (⌃⌘F among them), and a hidden block's copy isn't running.
+  run("layout.resize", { id: "menubar", px: 0 });
+  run("layout.hide", { id: "dock" });
+  for (const id of ["desk-left", "desk-right", "desk-top", "desk-bottom"]) run("layout.resize", { id, px: 0 });
+  run("layout.resize", { id: "window", weight: 1 });
+  run("layout.resize", { id: "desk-row", weight: 1 });
+  if (!appWindow()?.fullscreen) window.toggle_fullscreen();
+}
+
+/** Herdr's window left full screen some other way (macOS's own controls): the rest follows. */
+export function followNativeFullScreen() {
+  const fs = shared("sl.fs");
+  if (fs && Date.now() - (fs.at ?? 0) > 2000 && appWindow()?.fullscreen === false) toggleFullScreen();
+}
+
 /** Opens a sheet (the sheet role): kind and its props. */
 export function openSheet(kind, p = {}) {
   const [w, h] = SHEET[kind] ?? [450, 150];
@@ -792,6 +841,7 @@ export function perform(act) {
   if (act.toggle) run("layout.toggle", { id: act.toggle });
   if (act.look) setLook(act.look);
   if (act.fullscreen) window.toggle_fullscreen();
+  if (act.fullScreen) toggleFullScreen();
   if (act.zoomWindow) toggleZoom();
   if (act.tearOff) tearOff(act.tearOff);
   if (act.raise) raiseTorn(act.raise);
@@ -1047,6 +1097,7 @@ export function setSavedFrame(f) {
  * width: the window's width now (the title bar's).
  */
 export function toggleZoom(width = shared("sl.desk")?.window?.w) {
+  if (fullScreen()) return;
   if (!zoomed()) return fillDesktop();
   const saved = shared("sl.frame");
   if (saved?.w) return applyFrame(saved);
@@ -1061,6 +1112,8 @@ export function toggleZoom(width = shared("sl.desk")?.window?.w) {
 
 /** Starts moving ("move") or resizing ("resize") the window from a press. */
 export function startDrag(mode, e, width) {
+  // A full-screen window stays put.
+  if (fullScreen()) return;
   // The desk spacers hold their size reports until it's over (see desk.js).
   setShared("sl.dragging", true);
   openOverlay({

@@ -12,7 +12,7 @@ import {
 import {
   C, FONT, GLYPH, ICON, pill, paint, rrect, vgrad, fillGrad, openMenu, closeMenus, menuSize, shortcut, shown, plural, torn, tabInfo, canTear, remoteSpaceItems, pref, openSheet,
   fitFrame, takeAskMark, winState,
-  gauge, programIcon,
+  gauge, programIcon, fullScreen,
 } from "./kit.js";
 import { refreshUsage, usageItems, usageIcons, topPct } from "./usage.js";
 
@@ -200,7 +200,8 @@ export default class MenuBar {
         const look = settings()?.theme;
         const cur = typeof look === "string" ? look : null;
         return [
-          { label: appWindow()?.fullscreen ? "Exit Full Screen" : "Enter Full Screen", shortcut: sc("snowleopard.fullscreen"), act: { fullscreen: true } },
+          { label: fullScreen() ? "Exit Full Screen" : "Enter Full Screen", shortcut: sc("snowleopard.fullscreen"), act: { fullScreen: true } },
+          { label: "Fill Display with Desktop", shortcut: sc("snowleopard.desktopfullscreen"), checked: !fullScreen() && Boolean(appWindow()?.fullscreen), act: { fullscreen: true } },
           { sep: true },
           { label: shown("sidebar") ? "Hide Sidebar" : "Show Sidebar", shortcut: sc("layout.toggle:sidebar"), act: { toggle: "sidebar" } },
           { label: shown("tabs") ? "Hide Tab Bar" : "Show Tab Bar", act: { toggle: "tabs" } },

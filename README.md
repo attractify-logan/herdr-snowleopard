@@ -182,8 +182,11 @@ and Dock icon runs a real Herdr command.
   it's off by default.
 - **Aqua dialogs.** Close confirmations, About Herdr, and Force Quit (end any
   terminal).
-- **Full screen.** View › Enter Full Screen (⌃⌘F with the keys below) fills the
-  display with the whole desktop: menu bar, windows and Dock.
+- **Full screen.** View › Enter Full Screen (⌃⌘F with the keys below), or the
+  arrows at the title bar's right end, does what Lion did: the menu bar, the
+  Dock and the desktop go and the window fills the display. The same again, or
+  the green button, brings them back. View › Fill Display with Desktop keeps
+  the whole desktop instead: menu bar, windows and Dock.
 - **Terminal profiles.** Choose Basic, Pro, Homebrew, Ocean or Novel under
   View › Terminal Profile.
 

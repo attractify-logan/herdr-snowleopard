@@ -10,7 +10,7 @@ import { h_flex } from "gpui-base";
 import { spaces, focused, panes, run, knownAgents, shared, window as appWindow } from "herdr";
 import {
   C, GLYPH, ICON, key, paint, rrect, vgrad, embossed, bead, textured, openMenu, closeMenus, shortcut, shown,
-  startDrag, toggleZoom, reportSize, remoteSpaceItems, tabLabel,
+  startDrag, toggleZoom, reportSize, remoteSpaceItems, tabLabel, fullScreen, toggleFullScreen, followNativeFullScreen,
 } from "./kit.js";
 
 const TITLE = 22;
@@ -51,7 +51,8 @@ export default class TitleBar {
             .flex_none()
             .child(bead(on ? kind : "off", 14, this.lit ? glyph : null))
             .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-            .on_click(() => (command ? run(command) : toggleZoom(this.size?.width))),
+            // Green in full screen: out of it, as Lion's window does.
+            .on_click(() => (command ? run(command) : fullScreen() ? toggleFullScreen() : toggleZoom(this.size?.width))),
         ),
       );
   }
@@ -97,6 +98,7 @@ export default class TitleBar {
   render(_cx) {
     // A resize drag holds the window's size report until it's over (see desk.js).
     if (this.size && !shared("sl.dragging")) reportSize("window", this.size);
+    followNativeFullScreen();
     const w = this.size?.width ?? 0;
     const h = this.size?.height ?? 58;
     const live = key();
@@ -177,6 +179,18 @@ export default class TitleBar {
           ),
       )
       .child(div().absolute().top(4).left(8).child(this.lights()))
+      // Lion's full-screen arrows, at the title bar's right end.
+      .child(
+        div()
+          .id("tb-fullscreen")
+          .absolute()
+          .top(4)
+          .right(9)
+          .child(svg(GLYPH.fullScreen).w(13).h(13).text_color(live ? "#3d3d3d" : "#8c8c8c"))
+          .tooltip(fullScreen() ? "Exit Full Screen" : "Enter Full Screen")
+          .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+          .on_click(() => toggleFullScreen()),
+      )
       .child(div().absolute().top(TITLE).left(0).w_full().child(toolbar));
   }
 

@@ -38,7 +38,7 @@ import Linear from "./linear.js";
 import IMessage from "./imessage.js";
 import Notice from "./notice.js";
 import { spaces } from "herdr";
-import { openSheet, tearOff, mergeAll, torn, openWin, openSlackTab, openLinearTab, openImessageTab, imessageTab, setWin, winState, newTab, askCloseTab } from "./kit.js";
+import { openSheet, tearOff, mergeAll, torn, openWin, openSlackTab, openLinearTab, openImessageTab, imessageTab, setWin, winState, newTab, askCloseTab, toggleFullScreen } from "./kit.js";
 import { lastNotified } from "./slackwatch.js";
 import { lastNotified as lastIMessage, demoOn as imessageDemo } from "./imessagedb.js";
 import { demoIncoming } from "./imessage-demo.js";
@@ -52,7 +52,8 @@ const COMMANDS = {
   prefs: () => openSheet("prefs", { key: "sl-prefs" }),
   usage: () => refreshUsage(true),
   forcequit: () => openSheet("forcequit"),
-  fullscreen: () => window.toggle_fullscreen(),
+  fullscreen: () => toggleFullScreen(),
+  desktopfullscreen: () => window.toggle_fullscreen(),
   tearoff: () => {
     const t = spaces().find((s) => s.active)?.tabs.find((t) => t.active && !torn()[t.id]);
     if (t) tearOff(t.id);
